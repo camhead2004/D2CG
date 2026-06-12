@@ -1,5 +1,11 @@
 # include <iostream>
 # include <windows.h>
+# include <CommCtrl.h>
+# include <d2d1.h>
+# include <d2d1helper.h>
+
+# pragma comment (lib , "comctl32.lib")
+# pragma comment (lib , "d2d1.lib")
 	
 const RECT* const get_screens_coordinate() {
     HWND run_time_terminal_windows_handle{ GetConsoleWindow() };
@@ -10,6 +16,166 @@ const RECT* const get_screens_coordinate() {
 
     return &output_screens_rects_value;
 }
+
+
+// #5 Additinal data for Direct2D moving geometries type
+
+enum class GeometriesMovingCtrl {
+    NONE = 0 ,
+    ARROW_KEY = (1 << 1) ,
+    MOUSEHWEEL = (2 << 1) ,
+    LEFT_CLICKED = (3 << 1) ,
+    LEFT_CLICKED_HOLD = (4 << 1) ,
+};
+
+enum class GeometriesMovingSpace {
+    NONE , 
+    X_AXIS_ONLY , 
+    Y_AXIS_ONLY , 
+    FREE
+};
+
+enum class DirectionInX {
+    NONE , 
+    UP , 
+    DOWN , 
+};
+
+enum class DirectionInY {
+    NONE , 
+    LEFT ,
+    RIGHT , 
+};
+
+// #6 Set limited directions based on input GeometriesMovingSpace
+
+template<GeometriesMovingSpace>
+struct ValidDirection {};
+
+template<>
+struct ValidDirection<GeometriesMovingSpace::X_AXIS_ONLY> {
+    using Direction = DirectionInX;
+};
+
+template<>
+struct ValidDirection <GeometriesMovingSpace::Y_AXIS_ONLY> {
+    using Direction = DirectionInY;
+};
+
+template<>
+struct ValidDirection <GeometriesMovingSpace::FREE> {
+    using Direction = void;
+};
+
+
+template<GeometriesMovingSpace limited_space>
+struct ArrowsDirection {
+    typename ValidDirection<limited_space>::Direction arrow_left{ ValidDirection<limited_space>::Direction::NONE };
+    typename ValidDirection<limited_space>::Direction arrow_up{ ValidDirection<limited_space>::Direction::NONE };
+    typename ValidDirection<limited_space>::Direction arrow_right{ ValidDirection<limited_space>::Direction::NONE };
+    typename ValidDirection<limited_space>::Direction arrow_down{ ValidDirection<limited_space>::Direction::NONE };
+};
+
+template<GeometriesMovingSpace limited_space>
+struct MouseWheelsDirection {
+    typename ValidDirection<limited_space>::Direction wheel_up{ ValidDirection<limited_space>::Direction::NONE };
+    typename ValidDirection<limited_space>::Direction wheel_down{ ValidDirection<limited_space>::Direction::NONE };
+};
+
+// #6
+
+template<GeometriesMovingSpace limited_space>
+struct MovingGeometriesProp {
+    ArrowsDirection<limited_space> arrow_keys_direction;
+    MouseWheelsDirection<limited_space> mouse_wheel_direction;
+};
+
+// #5
+
+
+
+enum class GeometriesShape{
+    NONE , 
+    RECTANGLE , 
+    ROUNDED_RECTANGLE , 
+    ELLIPSE
+};
+
+// #4 Specialized direct 2d dimension type to set the objects dimension type 
+
+template<GeometriesShape>
+struct ShapeToDimensionType {};
+
+template<>
+struct ShapeToDimensionType<GeometriesShape::RECTANGLE> {
+    using Diemension = D2D1_RECT_F;
+    using Geometry = ID2D1RectangleGeometry*;
+};
+
+template<>
+struct ShapeToDimensionType<GeometriesShape::ROUNDED_RECTANGLE> {
+    using Diemension = D2D1_ROUNDED_RECT;
+    using Geometry = ID2D1RoundedRectangleGeometry*;
+};
+
+template<>
+struct ShapeToDimensionType<GeometriesShape::ELLIPSE> {
+    using Diemension = D2D1_ELLIPSE;
+    using Geometry = ID2D1EllipseGeometry*;
+};
+
+// #4 
+
+
+// #8 Partial specialized GeometriesInfo based on being static or moving geometries to store extra moving properties filed on the object 
+
+template<bool is_moving_geometry , GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE , GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+class Direct2DGeometriesInfo {};
+
+template<GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType>
+class Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> {
+    typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
+
+public :
+    typename ShapeToDimensionType<geos_shape>::Dimension geomestries_dimension_values {};
+
+};
+
+
+template<GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
+class Direct2DGeometriesInfo<true , geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , space_type> : Direct2DGeometriesInfo <false , geos_shape, FillsBrushType, StrokesBrushType> {
+
+public : 
+    MovingGeometriesProp<space_type> moving_properties;
+};
+
+// #8
+
+
+// #7 Define an object where a static class child windows store different types of custom Direct2D geometries 
+
+template<bool is_moving_geometry , GeometriesShape geos_shape>
+class Direct2DCustomGeometries {
+
+public :
+
+    void operator()() {
+
+    }
+
+
+private : 
+    
+    LRESULT CALLBACK static_windows_proc(HWND current_static_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter , UINT_PTR id , DWORD_PTR procs_data) {
+
+
+
+        return 0;
+    }
+
+};
+
+// #7
 
 
 // #1 Set main window procedure 
