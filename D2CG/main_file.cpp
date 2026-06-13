@@ -1,4 +1,5 @@
 # include <iostream>
+# include <vector>
 # include <memory>
 # include <windows.h>
 # include <CommCtrl.h>
@@ -71,16 +72,16 @@ struct ValidDirection <GeometriesMovingSpace::FREE> {
 
 template<GeometriesMovingSpace limited_space>
 struct ArrowsDirection {
-    typename ValidDirection<limited_space>::Direction arrow_left{ ValidDirection<limited_space>::Direction::NONE };
-    typename ValidDirection<limited_space>::Direction arrow_up{ ValidDirection<limited_space>::Direction::NONE };
-    typename ValidDirection<limited_space>::Direction arrow_right{ ValidDirection<limited_space>::Direction::NONE };
-    typename ValidDirection<limited_space>::Direction arrow_down{ ValidDirection<limited_space>::Direction::NONE };
+    typename ValidDirection<limited_space>::Direction arrow_left{};
+    typename ValidDirection<limited_space>::Direction arrow_up{};
+    typename ValidDirection<limited_space>::Direction arrow_right{};
+    typename ValidDirection<limited_space>::Direction arrow_down{};
 };
 
 template<GeometriesMovingSpace limited_space>
 struct MouseWheelsDirection {
-    typename ValidDirection<limited_space>::Direction wheel_up{ ValidDirection<limited_space>::Direction::NONE };
-    typename ValidDirection<limited_space>::Direction wheel_down{ ValidDirection<limited_space>::Direction::NONE };
+    typename ValidDirection<limited_space>::Direction wheel_up{};
+    typename ValidDirection<limited_space>::Direction wheel_down{};
 };
 
 // #6
@@ -206,24 +207,63 @@ public :
 
 // #7 Define an object where a static class child windows store different types of custom Direct2D geometries 
 
-template<bool is_moving_geometry , GeometriesShape geos_shape>
-class Direct2DCustomGeometries {
+class StaticWindowsCustomGeometries {
+    inline static std::vector<std::vector<std::unique_ptr<Direct2DGeometriesBase>>> static_windows_custom_direct_2d_geometries{};
+
 
 public :
 
-    void operator()(const HWND* const input_static_windows_handle_ptr) {
+    // #10 Subclass input static class windows into the static_windows_proc procedure 
 
+    void operator()(const HWND* const input_static_windows_handle_ptr) {
+        static int current_windows_subclass_id { 1 };
+        LONG_PTR input_windows_style{ GetWindowLongPtr(*input_static_windows_handle_ptr , GWL_STYLE) };
+
+        if (((WNDPROC)GetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_USERDATA) == nullptr) && ((input_windows_style & SS_NOTIFY) && (input_windows_style & SS_OWNERDRAW) && (input_windows_style & WS_CHILD))) {
+            WNDPROC old_windows_proc{ (WNDPROC)SetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_WNDPROC, (LONG_PTR)static_windows_proc) };
+            SetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_USERDATA, (LONG_PTR)old_windows_proc);
+            SetWindowSubclass(*input_static_windows_handle_ptr, static_windows_proc, current_windows_subclass_id, 0);
+            ++current_windows_subclass_id;
+        }
     }
+
+    // #10
 
 
 private : 
     
-    LRESULT CALLBACK static_windows_proc(HWND current_static_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter , UINT_PTR id , DWORD_PTR procs_data) {
+    // #11 A static class windows procedure to paint custom direct 2d geometries based on the geometries infos container 
+
+    static LRESULT CALLBACK static_windows_proc(HWND current_static_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter , UINT_PTR id , DWORD_PTR procs_data) {
+        WNDPROC old_windows_procedure{ (WNDPROC)GetWindowLongPtr(current_static_windows_handle , GWLP_USERDATA) };
+
+        switch (message_type) {
+
+        case WM_PAINT: {
+            break;
+        }
+
+        case WM_MOUSEMOVE: {
+            break;
+        }
+
+        case WM_KEYDOWN: {
+            break;
+        }
+
+        case WM_LBUTTONDOWN: {
+        case WM_LBUTTONDBLCLK : 
+            SetFocus(current_static_windows_handle);
+            break;
+        }
+
+        }
 
 
-
-        return 0;
+        return CallWindowProc(old_windows_procedure, current_static_windows_handle , message_type , word_parameter, long_parameter);
     }
+
+    // #11
 
 };
 
@@ -234,14 +274,27 @@ private :
 
 LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter) {
 
+    // Sample datas
+    static HWND static_1{};
+    static HWND static_2{};
+    StaticWindowsCustomGeometries a{};
+    StaticWindowsCustomGeometries b{};
+
 	switch (message_type) {
 
 	case WM_CREATE: {
         HWND run_time_terminals_windows_handle{ GetConsoleWindow() };
         auto run_time_terminals_windows_rects_values_ptr { get_screens_coordinate() };
         SetWindowPos(run_time_terminals_windows_handle, 0, run_time_terminals_windows_rects_values_ptr->right - 500, 0, 500, 400, 0);
-		std::cout << "WM_CREATE " << '\n';
-		break;
+		
+        
+        static_1 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 10, 900, 380, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
+        static_2 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 400, 900, 340, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
+        a(&static_1);
+        b(&static_2);
+
+
+        break;
 	}
 
 	default: {
