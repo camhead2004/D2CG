@@ -1,4 +1,5 @@
 # include <iostream>
+# include <memory>
 # include <windows.h>
 # include <CommCtrl.h>
 # include <d2d1.h>
@@ -108,19 +109,19 @@ struct ShapeToDimensionType {};
 
 template<>
 struct ShapeToDimensionType<GeometriesShape::RECTANGLE> {
-    using Diemension = D2D1_RECT_F;
+    using Dimension = D2D1_RECT_F;
     using Geometry = ID2D1RectangleGeometry*;
 };
 
 template<>
 struct ShapeToDimensionType<GeometriesShape::ROUNDED_RECTANGLE> {
-    using Diemension = D2D1_ROUNDED_RECT;
+    using Dimension = D2D1_ROUNDED_RECT;
     using Geometry = ID2D1RoundedRectangleGeometry*;
 };
 
 template<>
 struct ShapeToDimensionType<GeometriesShape::ELLIPSE> {
-    using Diemension = D2D1_ELLIPSE;
+    using Dimension = D2D1_ELLIPSE;
     using Geometry = ID2D1EllipseGeometry*;
 };
 
@@ -137,19 +138,70 @@ class Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType
     typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
 
 public :
-    typename ShapeToDimensionType<geos_shape>::Dimension geomestries_dimension_values {};
+    typename ShapeToDimensionType<geos_shape>::Dimension geometries_dimension_values {};
 
 };
 
 
 template<GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
-class Direct2DGeometriesInfo<true , geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , space_type> : Direct2DGeometriesInfo <false , geos_shape, FillsBrushType, StrokesBrushType> {
+class Direct2DGeometriesInfo<true , geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , space_type> : public Direct2DGeometriesInfo <false , geos_shape, FillsBrushType, StrokesBrushType> {
 
 public : 
     MovingGeometriesProp<space_type> moving_properties;
 };
 
 // #8
+
+
+// #9 Make a run time polymorphism to store a geometries properties in different template parameters and types in a vector container
+
+class Direct2DGeometriesBase {
+public :
+    virtual ~Direct2DGeometriesBase() = default;
+    virtual void* get_geometries_info() = 0;
+};
+
+
+template<bool is_moving_geometry , GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE , GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+class GeometriesWrapper{};
+
+template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType>
+class GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> : public Direct2DGeometriesBase {
+    
+public :
+    Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> geos_info{};
+    
+    GeometriesWrapper() = default;
+    GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> input_geometries_info) : geos_info(input_geometries_info) {
+       //std::cout << "Constructor GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> " << '\n';
+    };
+
+    void* get_geometries_info() override {
+        return &geos_info;
+    }
+
+};
+
+// #9
+
+
+template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
+class GeometriesWrapper<true , geos_shape , FillsBrushType , StrokesBrushType , ctrl_type , space_type> : public Direct2DGeometriesBase {
+
+public :
+    Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type, space_type> geos_info{};
+    GeometriesWrapper() = default;
+    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , space_type> input_geometries_info) : geos_info(input_geometries_info) {
+        //std::cout << "Constructor GeometriesWrapper<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , sapce_type> " << '\n';
+    };
+
+    void* get_geometries_info() override {
+        return &geos_info;
+    }
+
+};
+
+
 
 
 // #7 Define an object where a static class child windows store different types of custom Direct2D geometries 
@@ -159,7 +211,7 @@ class Direct2DCustomGeometries {
 
 public :
 
-    void operator()() {
+    void operator()(const HWND* const input_static_windows_handle_ptr) {
 
     }
 
@@ -229,7 +281,8 @@ void execute_the_main_window(COLORREF background_color) {
 
 
 int main() {
-	execute_the_main_window(RGB(0, 0, 0));
+    execute_the_main_window(RGB(0 , 0 , 0));
+
 
 	return 0;
 }
