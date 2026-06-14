@@ -8,6 +8,9 @@
 
 # pragma comment (lib , "comctl32.lib")
 # pragma comment (lib , "d2d1.lib")
+
+# include "main_file.hpp"
+# include "direct_2d_objects.hpp"
 	
 const RECT* const get_screens_coordinate() {
     HWND run_time_terminal_windows_handle{ GetConsoleWindow() };
@@ -18,191 +21,6 @@ const RECT* const get_screens_coordinate() {
 
     return &output_screens_rects_value;
 }
-
-
-// #5 Additinal data for Direct2D moving geometries type
-
-enum class GeometriesMovingCtrl {
-    NONE = 0 ,
-    ARROW_KEY = (1 << 1) ,
-    MOUSEHWEEL = (2 << 1) ,
-    LEFT_CLICKED = (3 << 1) ,
-    LEFT_CLICKED_HOLD = (4 << 1) ,
-};
-
-enum class GeometriesMovingSpace {
-    NONE , 
-    X_AXIS_ONLY , 
-    Y_AXIS_ONLY , 
-    FREE
-};
-
-enum class DirectionInX {
-    NONE , 
-    UP , 
-    DOWN , 
-};
-
-enum class DirectionInY {
-    NONE , 
-    LEFT ,
-    RIGHT , 
-};
-
-// #6 Set limited directions based on input GeometriesMovingSpace
-
-template<GeometriesMovingSpace>
-struct ValidDirection {};
-
-template<>
-struct ValidDirection<GeometriesMovingSpace::X_AXIS_ONLY> {
-    using Direction = DirectionInX;
-};
-
-template<>
-struct ValidDirection <GeometriesMovingSpace::Y_AXIS_ONLY> {
-    using Direction = DirectionInY;
-};
-
-template<>
-struct ValidDirection <GeometriesMovingSpace::FREE> {
-    using Direction = void;
-};
-
-
-template<GeometriesMovingSpace limited_space>
-struct ArrowsDirection {
-    typename ValidDirection<limited_space>::Direction arrow_left{};
-    typename ValidDirection<limited_space>::Direction arrow_up{};
-    typename ValidDirection<limited_space>::Direction arrow_right{};
-    typename ValidDirection<limited_space>::Direction arrow_down{};
-};
-
-template<GeometriesMovingSpace limited_space>
-struct MouseWheelsDirection {
-    typename ValidDirection<limited_space>::Direction wheel_up{};
-    typename ValidDirection<limited_space>::Direction wheel_down{};
-};
-
-// #6
-
-template<GeometriesMovingSpace limited_space>
-struct MovingGeometriesProp {
-    ArrowsDirection<limited_space> arrow_keys_direction;
-    MouseWheelsDirection<limited_space> mouse_wheel_direction;
-};
-
-// #5
-
-
-
-enum class GeometriesShape{
-    NONE , 
-    RECTANGLE , 
-    ROUNDED_RECTANGLE , 
-    ELLIPSE
-};
-
-// #4 Specialized direct 2d dimension type to set the objects dimension type 
-
-template<GeometriesShape>
-struct ShapeToDimensionType {};
-
-template<>
-struct ShapeToDimensionType<GeometriesShape::RECTANGLE> {
-    using Dimension = D2D1_RECT_F;
-    using Geometry = ID2D1RectangleGeometry*;
-};
-
-template<>
-struct ShapeToDimensionType<GeometriesShape::ROUNDED_RECTANGLE> {
-    using Dimension = D2D1_ROUNDED_RECT;
-    using Geometry = ID2D1RoundedRectangleGeometry*;
-};
-
-template<>
-struct ShapeToDimensionType<GeometriesShape::ELLIPSE> {
-    using Dimension = D2D1_ELLIPSE;
-    using Geometry = ID2D1EllipseGeometry*;
-};
-
-// #4 
-
-
-// #8 Partial specialized GeometriesInfo based on being static or moving geometries to store extra moving properties filed on the object 
-
-template<bool is_moving_geometry , GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE , GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
-class Direct2DGeometriesInfo {};
-
-template<GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType>
-class Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> {
-    typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
-
-public :
-    typename ShapeToDimensionType<geos_shape>::Dimension geometries_dimension_values {};
-
-};
-
-
-template<GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
-class Direct2DGeometriesInfo<true , geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , space_type> : public Direct2DGeometriesInfo <false , geos_shape, FillsBrushType, StrokesBrushType> {
-
-public : 
-    MovingGeometriesProp<space_type> moving_properties;
-};
-
-// #8
-
-
-// #9 Make a run time polymorphism to store a geometries properties in different template parameters and types in a vector container
-
-class Direct2DGeometriesBase {
-public :
-    virtual ~Direct2DGeometriesBase() = default;
-    virtual void* get_geometries_info() = 0;
-};
-
-
-template<bool is_moving_geometry , GeometriesShape geos_shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE , GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
-class GeometriesWrapper{};
-
-template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType>
-class GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> : public Direct2DGeometriesBase {
-    
-public :
-    Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> geos_info{};
-    
-    GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> input_geometries_info) : geos_info(input_geometries_info) {
-       //std::cout << "Constructor GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> " << '\n';
-    };
-
-    void* get_geometries_info() override {
-        return &geos_info;
-    }
-
-};
-
-// #9
-
-
-template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
-class GeometriesWrapper<true , geos_shape , FillsBrushType , StrokesBrushType , ctrl_type , space_type> : public Direct2DGeometriesBase {
-
-public :
-    Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type, space_type> geos_info{};
-    GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , space_type> input_geometries_info) : geos_info(input_geometries_info) {
-        //std::cout << "Constructor GeometriesWrapper<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , sapce_type> " << '\n';
-    };
-
-    void* get_geometries_info() override {
-        return &geos_info;
-    }
-
-};
-
-
 
 
 // #7 Define an object where a static class child windows store different types of custom Direct2D geometries 
@@ -229,6 +47,23 @@ public :
 
     // #10
 
+    // #12 Use SFINAE principle to get the right function with sutiable inputs that depends on the custom geometry being moveable or non-moveable 
+
+    template<bool is_moving_geometry , GeometriesShape shape , typename FillsBrushType , typename StrokesBrushType>
+    typename std::enable_if<!is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType, StrokesBrushType> style) {
+
+    }
+
+    template<bool is_moving_geometry , GeometriesShape shape, typename FillsBrushType, typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
+    typename std::enable_if<is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType, StrokesBrushType> style , 
+        MovingGeometriesProp<space_type> geometries_ctrl_moving_properties) {
+
+    }
+
+    // #12
+
+
+
 
 private : 
     
@@ -240,6 +75,10 @@ private :
         switch (message_type) {
 
         case WM_PAINT: {
+            PAINTSTRUCT windows_paint_info{};
+            HDC static_windows_device_context_handle{ BeginPaint(current_static_windows_handle , &windows_paint_info) };
+
+            EndPaint(current_static_windows_handle, &windows_paint_info);
             break;
         }
 
@@ -297,6 +136,7 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         break;
 	}
 
+
 	default: {
 		return DefWindowProc(main_windows_handle, message_type, word_parameter, long_parameter);
 	}
@@ -337,5 +177,5 @@ int main() {
     execute_the_main_window(RGB(0 , 0 , 0));
 
 
-	return 0;
+    return 0;
 }
