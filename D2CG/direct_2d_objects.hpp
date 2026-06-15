@@ -114,65 +114,71 @@ struct ShapeToDimensionType<GeometriesShape::ELLIPSE> {
 
 // #13 Configure a user_define_type for capsule and store the custom geometries style 
 
+enum class Direct2DPredefineBrushType {
+    SOLID , 
+    LINEAR_GRADIENT ,
+    RADIAL_GRADIENT ,
+};
+
 struct GradientStopCollectionProp {
     D2D1_GAMMA gamma_value{};
     D2D1_EXTEND_MODE extention_value{};
     std::vector<D2D1_GRADIENT_STOP> gradients_stops{};
 };
 
-template<typename BrushType>
+template<Direct2DPredefineBrushType>
 struct Direct2DBrushStyle {};
 
 
 template<>
-struct Direct2DBrushStyle<ID2D1SolidColorBrush*> {
+struct Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID> {
     D2D1::ColorF::Enum brushes_solid_color;
 };
 
 
 template<>
-struct Direct2DBrushStyle<ID2D1LinearGradientBrush*> : public GradientStopCollectionProp {
+struct Direct2DBrushStyle<Direct2DPredefineBrushType::LINEAR_GRADIENT> : public GradientStopCollectionProp {
     D2D1_POINT_2F linear_gradients_start_point{};
     D2D1_POINT_2F linear_gradients_end_point{};
 };
 
 template<>
-struct Direct2DBrushStyle<ID2D1RadialGradientBrush*> : public GradientStopCollectionProp {
+struct Direct2DBrushStyle<Direct2DPredefineBrushType::RADIAL_GRADIENT> : public GradientStopCollectionProp {
     D2D1_POINT_2F center{};
     FLOAT x_radius{};
     FLOAT y_radius{};
 };
 
-template<typename FillsBrushType , typename StrokesBrushType>
+template<Direct2DPredefineBrushType fills_brush_type, Direct2DPredefineBrushType strokes_brush_type>
 struct GeometriesCustomStyle {
-    Direct2DBrushStyle<FillsBrushType> fills_brush_info{};
+    Direct2DBrushStyle<fills_brush_type> fills_brush_info{};
     unsigned int fills_distance_from_stroke{};
-    Direct2DBrushStyle<StrokesBrushType> strokes_brush_info{};
+    Direct2DBrushStyle<strokes_brush_type> strokes_brush_info{};
     FLOAT strokes_width{};
 };
 
 // #13
 
 
-// #8 Partial specialized GeometriesInfo based on being static or moving geometries to store extra moving properties filed on the object 
+// #8 Partial specialized GeometriesInfo based on being static or moving geometries to store extra moving properties data member on the object 
 
-template<bool is_moving_geometry, GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType, GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+template<bool is_moving_geometry, GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
 class Direct2DGeometriesInfo {};
 
-template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType>
-class Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> {
+template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
+class Direct2DGeometriesInfo<false, geos_shape, fills_brush_type , strokes_brush_type> {
     typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
 
 public:
     typename ShapeToDimensionType<geos_shape>::Dimension geometries_dimension_values{};
-    GeometriesCustomStyle<FillsBrushType, StrokesBrushType> geometries_style{};
+    GeometriesCustomStyle<fills_brush_type , strokes_brush_type> geometries_style{};
 
 };
 
 
-template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
-class Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType, ctrl_type, space_type> : public Direct2DGeometriesInfo <false, geos_shape, FillsBrushType, StrokesBrushType> {
-
+template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
+class Direct2DGeometriesInfo<true, geos_shape, fills_brush_type , strokes_brush_type , ctrl_type, space_type> : public Direct2DGeometriesInfo <false, geos_shape, fills_brush_type , strokes_brush_type> {
+    
 public:
     MovingGeometriesProp<space_type> moving_properties;
 };
@@ -189,17 +195,18 @@ public:
 };
 
 
-template<bool is_moving_geometry, GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType, GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+template<bool is_moving_geometry, GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+
 class GeometriesWrapper {};
 
-template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType>
-class GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> : public Direct2DGeometriesBase {
+template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
+class GeometriesWrapper<false, geos_shape, fills_brush_type , strokes_brush_type> : public Direct2DGeometriesBase {
 
 public:
-    Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> geos_info{};
+    Direct2DGeometriesInfo<false, geos_shape, fills_brush_type , strokes_brush_type> geos_info{};
 
     GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> input_geometries_info) : geos_info(input_geometries_info) {
+    GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, fills_brush_type, strokes_brush_type> input_geometries_info) : geos_info(input_geometries_info) {
         //std::cout << "Constructor GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> " << '\n';
     };
 
@@ -212,22 +219,20 @@ public:
 // #9
 
 
-template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
-class GeometriesWrapper<true, geos_shape, FillsBrushType, StrokesBrushType, ctrl_type, space_type> : public Direct2DGeometriesBase {
+template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
+class GeometriesWrapper<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> : public Direct2DGeometriesBase {
 
 public:
-    Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType, ctrl_type, space_type> geos_info{};
+    Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> geos_info{};
     GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType, ctrl_type, space_type> input_geometries_info) : geos_info(input_geometries_info) {
+    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> input_geometries_info) : geos_info(input_geometries_info) {
         //std::cout << "Constructor GeometriesWrapper<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , sapce_type> " << '\n';
     };
 
     void* get_geometries_info() override {
         return &geos_info;
     }
-
 };
-
 
 
 # endif

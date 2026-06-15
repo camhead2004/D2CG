@@ -97,13 +97,13 @@ public :
 
     // #12 Use SFINAE principle to get the right function with sutiable inputs that depends on the custom geometry being moveable or non-moveable 
 
-    template<bool is_moving_geometry , GeometriesShape shape , typename FillsBrushType , typename StrokesBrushType>
-    typename std::enable_if<!is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType, StrokesBrushType> style) {
+    template<bool is_moving_geometry , GeometriesShape shape , Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
+    typename std::enable_if<!is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<fills_brush_type , strokes_brush_type> style) {
      //   std::cout << "add_custom_direct_2d_geometry --> false " << '\n';
     }
 
-    template<bool is_moving_geometry , GeometriesShape shape, typename FillsBrushType, typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
-    typename std::enable_if<is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType, StrokesBrushType> style , 
+    template<bool is_moving_geometry , GeometriesShape shape, Direct2DPredefineBrushType fills_brush_type, Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
+    typename std::enable_if<is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<fills_brush_type, strokes_brush_type> style ,
         MovingGeometriesProp<space_type> geometries_ctrl_moving_properties) {
         std::cout << "add_custom_direct_2d_geometry --> true " << '\n';
     }
