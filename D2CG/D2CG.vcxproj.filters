@@ -26,5 +26,8 @@
     <ClInclude Include="direct_2d_objects.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="geometries_infos_fileds_configuration.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

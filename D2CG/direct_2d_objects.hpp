@@ -2,6 +2,7 @@
 # define DIRECT_2D_OBJECTS_HPP
 
 # include <d2d1.h>
+# include <variant>
 
 // #5 Additinal data for Direct2D moving geometries type
 
@@ -162,6 +163,15 @@ struct GeometriesCustomStyle {
 
 // #8 Partial specialized GeometriesInfo based on being static or moving geometries to store extra moving properties data member on the object 
 
+// #18 use std::variant to store all types Direct2DGeometries data member in run time 
+
+using DimensionVariantPtr = std::variant<D2D1_RECT_F*, D2D1_ROUNDED_RECT*, D2D1_ELLIPSE*>;
+using GeometriesVariantPtrPtr = std::variant<ID2D1RectangleGeometry**, ID2D1RoundedRectangleGeometry**, ID2D1EllipseGeometry**>;
+using MovingPropertiesVariant = std::variant<MovingGeometriesProp<GeometriesMovingSpace::X_AXIS_ONLY>, MovingGeometriesProp<GeometriesMovingSpace::Y_AXIS_ONLY>, MovingGeometriesProp<GeometriesMovingSpace::FREE>>;
+using BrushVariant = std::variant<Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID>, Direct2DBrushStyle<Direct2DPredefineBrushType::LINEAR_GRADIENT>, Direct2DBrushStyle<Direct2DPredefineBrushType::RADIAL_GRADIENT>>;
+
+// #18
+
 template<bool is_moving_geometry, GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
 class Direct2DGeometriesInfo {};
 
@@ -191,13 +201,13 @@ public:
 class Direct2DGeometriesBase {
 public:
     virtual ~Direct2DGeometriesBase() = default;
-    virtual void* get_geometries_info() = 0;
+    virtual DimensionVariantPtr get_dimension_ptr() = 0;
 };
 
 
 template<bool is_moving_geometry, GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
-
 class GeometriesWrapper {};
+
 
 template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
 class GeometriesWrapper<false, geos_shape, fills_brush_type , strokes_brush_type> : public Direct2DGeometriesBase {
@@ -210,14 +220,13 @@ public:
         //std::cout << "Constructor GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> " << '\n';
     };
 
-    void* get_geometries_info() override {
-        return &geos_info;
+    DimensionVariantPtr get_dimension_ptr() override {
+        return &geos_info.geometries_dimension_values;
     }
 
 };
 
 // #9
-
 
 template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
 class GeometriesWrapper<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> : public Direct2DGeometriesBase {
@@ -228,9 +237,9 @@ public:
     GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> input_geometries_info) : geos_info(input_geometries_info) {
         //std::cout << "Constructor GeometriesWrapper<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , sapce_type> " << '\n';
     };
-
-    void* get_geometries_info() override {
-        return &geos_info;
+    
+    DimensionVariantPtr get_dimension_ptr() override {
+        return &geos_info.geometries_dimension_values;
     }
 };
 
