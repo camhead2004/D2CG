@@ -133,7 +133,7 @@ struct Direct2DBrushStyle {};
 
 template<>
 struct Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID> {
-    D2D1::ColorF::Enum brushes_solid_color;
+    D2D1::ColorF::Enum brush_solid_color;
 };
 
 
@@ -168,7 +168,7 @@ struct GeometriesCustomStyle {
 using DimensionVariantPtr = std::variant<D2D1_RECT_F*, D2D1_ROUNDED_RECT*, D2D1_ELLIPSE*>;
 using GeometriesVariantPtrPtr = std::variant<ID2D1RectangleGeometry**, ID2D1RoundedRectangleGeometry**, ID2D1EllipseGeometry**>;
 using MovingPropertiesVariant = std::variant<MovingGeometriesProp<GeometriesMovingSpace::X_AXIS_ONLY>, MovingGeometriesProp<GeometriesMovingSpace::Y_AXIS_ONLY>, MovingGeometriesProp<GeometriesMovingSpace::FREE>>;
-using BrushVariant = std::variant<Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID>, Direct2DBrushStyle<Direct2DPredefineBrushType::LINEAR_GRADIENT>, Direct2DBrushStyle<Direct2DPredefineBrushType::RADIAL_GRADIENT>>;
+using BrushVariantPtr = std::variant<Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID>*, Direct2DBrushStyle<Direct2DPredefineBrushType::LINEAR_GRADIENT>* , Direct2DBrushStyle<Direct2DPredefineBrushType::RADIAL_GRADIENT>*>;
 
 // #18
 
@@ -177,9 +177,8 @@ class Direct2DGeometriesInfo {};
 
 template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
 class Direct2DGeometriesInfo<false, geos_shape, fills_brush_type , strokes_brush_type> {
-    typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
-
 public:
+    typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
     typename ShapeToDimensionType<geos_shape>::Dimension geometries_dimension_values{};
     GeometriesCustomStyle<fills_brush_type , strokes_brush_type> geometries_style{};
 
@@ -202,6 +201,11 @@ class Direct2DGeometriesBase {
 public:
     virtual ~Direct2DGeometriesBase() = default;
     virtual DimensionVariantPtr get_dimension_ptr() = 0;
+    virtual void set_geometries_new_coordinate(DimensionVariantPtr dimension_ptr , D2D1_POINT_2F new_coordiate) = 0;
+    virtual GeometriesVariantPtrPtr get_shapes_geometry_ptr_ptr() = 0;
+    virtual std::pair<BrushVariantPtr, BrushVariantPtr> get_brush_properties() = 0;
+    virtual unsigned int get_fills_distance_from_stroke() = 0;
+    virtual FLOAT get_strokes_width() = 0;
 };
 
 
@@ -210,38 +214,87 @@ class GeometriesWrapper {};
 
 
 template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
-class GeometriesWrapper<false, geos_shape, fills_brush_type , strokes_brush_type> : public Direct2DGeometriesBase {
+class GeometriesWrapper<false, geos_shape, fills_brush_type, strokes_brush_type> : public Direct2DGeometriesBase {
 
 public:
-    Direct2DGeometriesInfo<false, geos_shape, fills_brush_type , strokes_brush_type> geos_info{};
+    Direct2DGeometriesInfo<false, geos_shape, fills_brush_type, strokes_brush_type> geos_info{};
 
     GeometriesWrapper() = default;
     GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, fills_brush_type, strokes_brush_type> input_geometries_info) : geos_info(input_geometries_info) {
         //std::cout << "Constructor GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> " << '\n';
     };
 
+
     DimensionVariantPtr get_dimension_ptr() override {
         return &geos_info.geometries_dimension_values;
     }
 
+    void set_geometries_new_coordinate(DimensionVariantPtr dimension_ptr, D2D1_POINT_2F new_coordinate) override {
+
+        std::visit([dimension_ptr , new_coordinate](auto&& dimension) {
+            using CurrentDimensionType = std::decay_t<decltype(dimension)>;
+
+            if constexpr (std::is_same_v<CurrentDimensionType , D2D1_ELLIPSE*>) {
+                D2D1_ELLIPSE* new_ellipse_dimension_ptr{ dimension };
+                new_ellipse_dimension_ptr->point.x = new_coordinate.x;
+                new_ellipse_dimension_ptr->point.y = new_coordinate.y;
+            }
+
+            else if constexpr (std::is_same_v <CurrentDimensionType, D2D1_RECT_F*>) {
+                D2D1_RECT_F* new_rectangle_dimension_ptr{ dimension };
+                D2D1_POINT_2F old_rectangles_size{ D2D1::Point2F(new_rectangle_dimension_ptr->right - new_rectangle_dimension_ptr->left , new_rectangle_dimension_ptr->bottom - new_rectangle_dimension_ptr->top) };
+                new_rectangle_dimension_ptr->left = new_coordinate.x - (old_rectangles_size.x / 2.0f);
+                new_rectangle_dimension_ptr->top = new_coordinate.y - (old_rectangles_size.y / 2.0f);
+                new_rectangle_dimension_ptr->right = new_coordinate.x + (old_rectangles_size.x / 2.0f);
+                new_rectangle_dimension_ptr->bottom = new_coordinate.y + (old_rectangles_size.y / 2.0f);
+            }
+
+            else {
+                D2D1_ROUNDED_RECT* new_rounded_rectangle_dimension_ptr{ dimension };
+
+                D2D1_POINT_2F old_rounded_rectangle_size{ D2D1::Point2F(new_rounded_rectangle_dimension_ptr->rect.right - new_rounded_rectangle_dimension_ptr->rect.left , new_rounded_rectangle_dimension_ptr->rect.bottom - new_rounded_rectangle_dimension_ptr->rect.top) };
+
+                new_rounded_rectangle_dimension_ptr->rect.left = new_coordinate.x - (old_rounded_rectangle_size.x / 2.0f);
+                new_rounded_rectangle_dimension_ptr->rect.top = new_coordinate.y - (old_rounded_rectangle_size.y / 2.0f);
+                new_rounded_rectangle_dimension_ptr->rect.right = new_coordinate.x + (old_rounded_rectangle_size.x / 2.0f);
+                new_rounded_rectangle_dimension_ptr->rect.bottom = new_coordinate.y + (old_rounded_rectangle_size.y / 2.0f);
+            }
+
+
+            ;}, dimension_ptr);
+
+
+    }
+
+    GeometriesVariantPtrPtr get_shapes_geometry_ptr_ptr() override {
+        return &geos_info.shapes_geometry;
+    }
+    
+    std::pair<BrushVariantPtr, BrushVariantPtr> get_brush_properties() override {
+        return { &geos_info.geometries_style.fills_brush_info , &geos_info.geometries_style.strokes_brush_info };
+    }
+
+    unsigned int get_fills_distance_from_stroke() override {
+        return geos_info.geometries_style.fills_distance_from_stroke;
+    }
+
+    FLOAT get_strokes_width() override {
+        return geos_info.geometries_style.strokes_width;
+    };
+
 };
 
-// #9
 
 template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
-class GeometriesWrapper<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> : public Direct2DGeometriesBase {
+class GeometriesWrapper<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> : public GeometriesWrapper<false , geos_shape , fills_brush_type , strokes_brush_type> {
 
 public:
     Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> geos_info{};
     GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> input_geometries_info) : geos_info(input_geometries_info) {
-        //std::cout << "Constructor GeometriesWrapper<true, geos_shape, FillsBrushType, StrokesBrushType , ctrl_type , sapce_type> " << '\n';
-    };
-    
-    DimensionVariantPtr get_dimension_ptr() override {
-        return &geos_info.geometries_dimension_values;
-    }
+    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> input_geometries_info) : GeometriesWrapper<false, geos_shape, fills_brush_type, strokes_brush_type>(input_geometries_info) , geos_info(input_geometries_info) {};
+
 };
 
+// #9
 
 # endif

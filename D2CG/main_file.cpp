@@ -11,8 +11,11 @@
 
 # include "main_file.hpp"
 # include "direct_2d_objects.hpp"
-	
+# include "direct_2d_function.hpp"
+
 # define WM_GET_GEOMETRIES_INFO 1024
+
+
 
 const RECT* const get_screens_coordinate() {
     HWND run_time_terminal_windows_handle{ GetConsoleWindow() };
@@ -109,6 +112,16 @@ public :
         Direct2DGeometriesInfo<is_moving_geometry, shape, fills_brush_type, strokes_brush_type> concrete_type_geometries_info{};
         concrete_type_geometries_info.geometries_dimension_values = dimension_values;
         concrete_type_geometries_info.geometries_style = style;
+        
+        if (update_the_render_target(&static_class_windows_handle)) {
+
+            if (!SUCCEEDED(init_direct_factory_and_render_target_windows(&static_class_windows_handle, &current_static_windows_factory_ptr, &current_static_windows_target_ptr))) {
+                std::cout << "Error at setting the windows render target " << '\n';
+            }
+        }
+        
+        auto geometry_function{ set_direct_2d_geometry_function<typename ShapeToDimensionType<shape>::Geometry>(&current_static_windows_factory_ptr) };
+        geometry_function(concrete_type_geometries_info.geometries_dimension_values , &concrete_type_geometries_info.shapes_geometry);
         static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, fills_brush_type, strokes_brush_type>>(concrete_type_geometries_info));
         
         // #17
@@ -118,6 +131,10 @@ public :
     typename std::enable_if<is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<fills_brush_type, strokes_brush_type> style ,
         MovingGeometriesProp<space_type> geometries_ctrl_moving_properties) {
 
+        Direct2DGeometriesInfo<is_moving_geometry, shape, fills_brush_type, strokes_brush_type , ctrl_type , space_type> concrete_type_geometries_info{};
+        concrete_type_geometries_info.geometries_dimension_values = dimension_values;
+        concrete_type_geometries_info.geometries_style = style;
+        static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, fills_brush_type, strokes_brush_type , ctrl_type , space_type>>(concrete_type_geometries_info));
     }
 
     // #12
@@ -132,6 +149,8 @@ private :
         switch (message_type) {
 
         case WM_PAINT: {
+            // #20 Paint statics windows custom direct 2d geometries in a for loop
+
             PAINTSTRUCT windows_paint_info{};
             HDC static_windows_device_context_handle{ BeginPaint(current_static_windows_handle , &windows_paint_info) };
 
@@ -142,7 +161,15 @@ private :
                 }
             }
 
+
+            for (int static_windows_geometry{ 0 }; static_windows_geometry < static_windows_custom_direct_2d_geometries[ id - 1].size(); ++static_windows_geometry) {
+            
+            }
+
+
             EndPaint(current_static_windows_handle, &windows_paint_info);
+            
+            // #20
             break;
         }
 
@@ -164,50 +191,6 @@ private :
         }
 
         case WM_KEYDOWN: {
-            //static_windows_custom_direct_2d_geometries[id][0].get()->get_dimension_ptr();
-
-            if (LOWORD(word_parameter) == VK_SPACE) {
-                
-                std::visit([](auto&& dimension) {
-                    using T = std::decay_t<decltype(dimension)>;
-
-                    if constexpr (std::is_same<T , D2D1_ELLIPSE*>()) {
-                        D2D1_ELLIPSE* ellipse_ptr{ dimension };
-
-                        std::cout << '\n';
-                        std::cout << "point x : " << ellipse_ptr->point.x << '\n';
-                        std::cout << "point y : " << ellipse_ptr->point.y << '\n';
-                        std::cout << "radiusX  : " << ellipse_ptr->radiusX << '\n';
-                        std::cout << "radiusY  : " << ellipse_ptr->radiusY << '\n';
-                        std::cout << '\n';
-                    }
-                    
-                    
-                ; } , static_windows_custom_direct_2d_geometries[id - 1][0].get()->get_dimension_ptr());
-            
-            }
-            
-            else if (LOWORD(word_parameter) == VK_RETURN) {
-
-                std::visit([](auto&& dimension) {
-                    using T = std::decay_t<decltype(dimension)>;
-
-                    if constexpr (std::is_same<T, D2D1_ELLIPSE*>()) {
-                        std::cout << '\n';
-                        std::cout << "ENTER " << '\n';
-                        D2D1_ELLIPSE* ellipse_ptr{ dimension };
-                        ellipse_ptr->point.x *= 2;
-                        ellipse_ptr->point.y *= 2;
-                        ellipse_ptr->radiusX *= 2;
-                        ellipse_ptr->radiusY *= 2;
-                    }
-
-
-                    ; }, static_windows_custom_direct_2d_geometries[id - 1][0].get()->get_dimension_ptr());
-
-            }
-
-            break;
         }
 
         case WM_LBUTTONDOWN: {
@@ -255,9 +238,24 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         a(&static_1);
         b(&static_2);
 
-        a.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, Direct2DPredefineBrushType::SOLID, Direct2DPredefineBrushType::SOLID>(D2D1::Ellipse(D2D1::Point2F(30.0f, 30.0f), 50.0f, 50.0f), {});
-        b.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, Direct2DPredefineBrushType::SOLID, Direct2DPredefineBrushType::SOLID>(D2D1::Ellipse(D2D1::Point2F(50.0f, 50.0f), 90.0f, 90.0f), {});
 
+        a.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, Direct2DPredefineBrushType::SOLID, Direct2DPredefineBrushType::SOLID>(D2D1::Ellipse(D2D1::Point2F(30.0f, 30.0f), 50.0f, 50.0f), 
+            
+            { .fills_brush_info{ D2D1::ColorF::BlueViolet } ,
+              .fills_distance_from_stroke{ 20 } ,
+              .strokes_brush_info{ D2D1::ColorF::Coral } ,
+              .strokes_width{ 5.5f }
+            }
+        );
+
+        
+        b.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, Direct2DPredefineBrushType::SOLID, Direct2DPredefineBrushType::SOLID>(D2D1::Ellipse(D2D1::Point2F(50.0f, 50.0f), 90.0f, 90.0f),
+            { .fills_brush_info{ D2D1::ColorF::Aquamarine } ,
+              .fills_distance_from_stroke{ 10 } ,
+              .strokes_brush_info{ D2D1::ColorF::HotPink } ,
+              .strokes_width{ 15.5f }
+            }
+        );
 
         /*
         D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &main_windows_factory_ptr);
@@ -270,7 +268,7 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         break;
 	}
 
-        /*
+    /*
     case WM_PAINT: {
         PAINTSTRUCT paint_info{};
         HDC device_context_handle{ BeginPaint(main_windows_handle , &paint_info) };
@@ -290,7 +288,7 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         main_windows_render_target_ptr->CreateLinearGradientBrush(linear_prop , stop_collection_ptr , &linear_gradient_brush_ptr);
         main_windows_render_target_ptr->CreateRadialGradientBrush(radial_prop , stop_collection_ptr , &radial_gradient_brush_ptr);
 
-
+        //main_windows_factory_ptr->CreateEllipseGeometry( ,);
 
         main_windows_render_target_ptr->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::BlueViolet) , &solid_brush_ptr);
         //main_windows_render_target_ptr->CreateLinearGradientBrush( , );
@@ -307,7 +305,7 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         EndPaint(main_windows_handle, &paint_info);
         return 0;
     }
-        */
+    */
 
 
 	default: {
@@ -349,5 +347,8 @@ void execute_the_main_window(COLORREF background_color) {
 int main() {
     execute_the_main_window(RGB(0 , 0 , 0));
 
+
     return 0;
 }
+
+// last comment #20
