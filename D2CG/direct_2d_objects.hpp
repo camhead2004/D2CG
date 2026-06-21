@@ -115,47 +115,45 @@ struct ShapeToDimensionType<GeometriesShape::ELLIPSE> {
 
 // #13 Configure a user_define_type for capsule and store the custom geometries style 
 
-enum class Direct2DPredefineBrushType {
-    SOLID , 
-    LINEAR_GRADIENT ,
-    RADIAL_GRADIENT ,
-};
-
 struct GradientStopCollectionProp {
     D2D1_GAMMA gamma_value{};
     D2D1_EXTEND_MODE extention_value{};
     std::vector<D2D1_GRADIENT_STOP> gradients_stops{};
 };
 
-template<Direct2DPredefineBrushType>
+template<typename BrushType>
 struct Direct2DBrushStyle {};
 
 
 template<>
-struct Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID> {
-    D2D1::ColorF::Enum brush_solid_color;
+struct Direct2DBrushStyle<ID2D1SolidColorBrush*> {
+    D2D1_COLOR_F brush_solid_color;
 };
 
 
 template<>
-struct Direct2DBrushStyle<Direct2DPredefineBrushType::LINEAR_GRADIENT> : public GradientStopCollectionProp {
+struct Direct2DBrushStyle<ID2D1LinearGradientBrush*> : public GradientStopCollectionProp {
     D2D1_POINT_2F linear_gradients_start_point{};
     D2D1_POINT_2F linear_gradients_end_point{};
 };
 
 template<>
-struct Direct2DBrushStyle<Direct2DPredefineBrushType::RADIAL_GRADIENT> : public GradientStopCollectionProp {
+struct Direct2DBrushStyle<ID2D1RadialGradientBrush*> : public GradientStopCollectionProp {
     D2D1_POINT_2F center{};
     FLOAT x_radius{};
     FLOAT y_radius{};
 };
 
-template<Direct2DPredefineBrushType fills_brush_type, Direct2DPredefineBrushType strokes_brush_type>
+
+
+template<typename FillsBrushType , typename StrokesBrushType>
 struct GeometriesCustomStyle {
-    Direct2DBrushStyle<fills_brush_type> fills_brush_info{};
+    Direct2DBrushStyle<FillsBrushType> fills_brush_info{};
     unsigned int fills_distance_from_stroke{};
-    Direct2DBrushStyle<strokes_brush_type> strokes_brush_info{};
+    Direct2DBrushStyle<StrokesBrushType> strokes_brush_info{};
     FLOAT strokes_width{};
+    FillsBrushType fills_brush_ptr{};
+    StrokesBrushType strokes_brush_ptr{};
 };
 
 // #13
@@ -168,25 +166,28 @@ struct GeometriesCustomStyle {
 using DimensionVariantPtr = std::variant<D2D1_RECT_F*, D2D1_ROUNDED_RECT*, D2D1_ELLIPSE*>;
 using GeometriesVariantPtrPtr = std::variant<ID2D1RectangleGeometry**, ID2D1RoundedRectangleGeometry**, ID2D1EllipseGeometry**>;
 using MovingPropertiesVariant = std::variant<MovingGeometriesProp<GeometriesMovingSpace::X_AXIS_ONLY>, MovingGeometriesProp<GeometriesMovingSpace::Y_AXIS_ONLY>, MovingGeometriesProp<GeometriesMovingSpace::FREE>>;
-using BrushVariantPtr = std::variant<Direct2DBrushStyle<Direct2DPredefineBrushType::SOLID>*, Direct2DBrushStyle<Direct2DPredefineBrushType::LINEAR_GRADIENT>* , Direct2DBrushStyle<Direct2DPredefineBrushType::RADIAL_GRADIENT>*>;
+//using BrushVariantPtr = std::variant<Direct2DBrushStyle<ID2D1SolidColorBrush*>*, Direct2DBrushStyle<ID2D1LinearGradientBrush*>* , Direct2DBrushStyle<ID2D1RadialGradientBrush*>*>;
+using BrushVariantPtrPtr = std::variant<ID2D1SolidColorBrush**, ID2D1LinearGradientBrush**, ID2D1RadialGradientBrush**>;
+
+
 
 // #18
 
-template<bool is_moving_geometry, GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+template<bool is_moving_geometry, GeometriesShape geos_shape, typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
 class Direct2DGeometriesInfo {};
 
-template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
-class Direct2DGeometriesInfo<false, geos_shape, fills_brush_type , strokes_brush_type> {
+template<GeometriesShape geos_shape, typename FillsBrushType , typename StrokesBrushType>
+class Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> {
 public:
     typename ShapeToDimensionType<geos_shape>::Geometry shapes_geometry{};
     typename ShapeToDimensionType<geos_shape>::Dimension geometries_dimension_values{};
-    GeometriesCustomStyle<fills_brush_type , strokes_brush_type> geometries_style{};
+    GeometriesCustomStyle<FillsBrushType , StrokesBrushType> geometries_style{};
 
 };
 
 
-template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
-class Direct2DGeometriesInfo<true, geos_shape, fills_brush_type , strokes_brush_type , ctrl_type, space_type> : public Direct2DGeometriesInfo <false, geos_shape, fills_brush_type , strokes_brush_type> {
+template<GeometriesShape geos_shape , typename FillsBrushType, typename StrokesBrushType, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
+class Direct2DGeometriesInfo<true, geos_shape, FillsBrushType , StrokesBrushType , ctrl_type, space_type> : public Direct2DGeometriesInfo <false , geos_shape , FillsBrushType , StrokesBrushType> {
     
 public:
     MovingGeometriesProp<space_type> moving_properties;
@@ -202,25 +203,25 @@ public:
     virtual ~Direct2DGeometriesBase() = default;
     virtual DimensionVariantPtr get_dimension_ptr() = 0;
     virtual void set_geometries_new_coordinate(DimensionVariantPtr dimension_ptr , D2D1_POINT_2F new_coordiate) = 0;
+    virtual std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> get_geometries_brush() = 0;
     virtual GeometriesVariantPtrPtr get_shapes_geometry_ptr_ptr() = 0;
-    virtual std::pair<BrushVariantPtr, BrushVariantPtr> get_brush_properties() = 0;
     virtual unsigned int get_fills_distance_from_stroke() = 0;
     virtual FLOAT get_strokes_width() = 0;
 };
 
 
-template<bool is_moving_geometry, GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
+template<bool is_moving_geometry, GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType , GeometriesMovingCtrl ctrl_type = GeometriesMovingCtrl::NONE, GeometriesMovingSpace space_type = GeometriesMovingSpace::NONE>
 class GeometriesWrapper {};
 
 
-template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
-class GeometriesWrapper<false, geos_shape, fills_brush_type, strokes_brush_type> : public Direct2DGeometriesBase {
+template<GeometriesShape geos_shape, typename FillsBrushType, typename StrokesBrushType>
+class GeometriesWrapper<false, geos_shape, FillsBrushType , StrokesBrushType> : public Direct2DGeometriesBase {
 
 public:
-    Direct2DGeometriesInfo<false, geos_shape, fills_brush_type, strokes_brush_type> geos_info{};
+    Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> geos_info{};
 
     GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, fills_brush_type, strokes_brush_type> input_geometries_info) : geos_info(input_geometries_info) {
+    GeometriesWrapper(Direct2DGeometriesInfo<false, geos_shape, FillsBrushType, StrokesBrushType> input_geometries_info) : geos_info(input_geometries_info) {
         //std::cout << "Constructor GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType> " << '\n';
     };
 
@@ -266,14 +267,14 @@ public:
 
     }
 
+    std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> get_geometries_brush() override {
+        return { &geos_info.geometries_style.fills_brush_ptr , &geos_info.geometries_style.strokes_brush_ptr };
+    }
+
     GeometriesVariantPtrPtr get_shapes_geometry_ptr_ptr() override {
         return &geos_info.shapes_geometry;
     }
     
-    std::pair<BrushVariantPtr, BrushVariantPtr> get_brush_properties() override {
-        return { &geos_info.geometries_style.fills_brush_info , &geos_info.geometries_style.strokes_brush_info };
-    }
-
     unsigned int get_fills_distance_from_stroke() override {
         return geos_info.geometries_style.fills_distance_from_stroke;
     }
@@ -285,13 +286,13 @@ public:
 };
 
 
-template<GeometriesShape geos_shape, Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
-class GeometriesWrapper<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> : public GeometriesWrapper<false , geos_shape , fills_brush_type , strokes_brush_type> {
+template<GeometriesShape geos_shape, typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type, GeometriesMovingSpace space_type>
+class GeometriesWrapper<true, geos_shape , FillsBrushType , StrokesBrushType , ctrl_type, space_type> : public GeometriesWrapper<false , geos_shape , FillsBrushType , StrokesBrushType> {
 
 public:
-    Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> geos_info{};
+    Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType, ctrl_type, space_type> geos_info{};
     GeometriesWrapper() = default;
-    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, fills_brush_type, strokes_brush_type, ctrl_type, space_type> input_geometries_info) : GeometriesWrapper<false, geos_shape, fills_brush_type, strokes_brush_type>(input_geometries_info) , geos_info(input_geometries_info) {};
+    GeometriesWrapper(Direct2DGeometriesInfo<true, geos_shape, FillsBrushType, StrokesBrushType, ctrl_type, space_type> input_geometries_info) : GeometriesWrapper<false, geos_shape, FillsBrushType, StrokesBrushType>(input_geometries_info) , geos_info(input_geometries_info) {};
 
 };
 

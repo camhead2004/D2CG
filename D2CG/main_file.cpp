@@ -32,45 +32,29 @@ const RECT* const get_screens_coordinate() {
 class StaticWindowsCustomGeometries {
     HWND static_class_windows_handle{};
     inline static std::vector<std::vector<std::unique_ptr<Direct2DGeometriesBase>>> static_windows_custom_direct_2d_geometries{};
-    inline static ID2D1Factory* current_static_windows_factory_ptr { nullptr };
-    inline static ID2D1HwndRenderTarget* current_static_windows_target_ptr{ nullptr };
+    inline static std::vector<ID2D1Factory*> static_windows_factory_ptr { nullptr };
+    inline static std::vector<ID2D1HwndRenderTarget*> static_windows_target_ptr{ nullptr };
 
-    // #15 Update the windows render target rects values if the procedures windows handle change in WM_MOUSEMOVE , WM_PAINT messages in run time
+    // #14 Set ID2D1Factory* and ID2D1HwndRenderTarget* objects for each static window 
 
-    static bool update_the_render_target(const HWND* const procudure_windows_handle_ptr) {
-        RECT render_target_rects_values{ 0 , 0 , 0 , 0 };
+    static HRESULT init_direct_factory_and_render_target_windows(const HWND* const static_windows_handle_ptr, int windows_id) {
+        HRESULT output_result{};
 
-        if (current_static_windows_factory_ptr && current_static_windows_target_ptr) {
-            HWND render_target_windows_handle{ current_static_windows_target_ptr->GetHwnd() };
-            GetWindowRect(render_target_windows_handle, &render_target_rects_values);
-        }
-        
-        RECT procedure_windows_rects_values{};
-        GetWindowRect(*procudure_windows_handle_ptr, &procedure_windows_rects_values);
+        static_windows_factory_ptr.resize(GetDlgCtrlID(*static_windows_handle_ptr));
+        static_windows_target_ptr.resize(GetDlgCtrlID(*static_windows_handle_ptr));
+        output_result = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &static_windows_factory_ptr.back());
 
-        return (render_target_rects_values.left != procedure_windows_rects_values.left || render_target_rects_values.top != procedure_windows_rects_values.top || render_target_rects_values.right != procedure_windows_rects_values.right ||
-            render_target_rects_values.bottom != procedure_windows_rects_values.bottom);
-    }
+        if (SUCCEEDED(output_result)) {
+            RECT current_static_windows_clients_rects_values{};
+            GetClientRect(*static_windows_handle_ptr, &current_static_windows_clients_rects_values);
 
-    // #15 
+            D2D1_HWND_RENDER_TARGET_PROPERTIES current_windows_properties{
+                .hwnd{ *static_windows_handle_ptr } ,
+                .pixelSize{ D2D1::SizeU(current_static_windows_clients_rects_values.right , current_static_windows_clients_rects_values.bottom) } ,
+                .presentOptions{D2D1_PRESENT_OPTIONS_IMMEDIATELY}
+            };
 
-
-    // #14 Update the factory and hwnd render target to draw direct 2d custom geometries based on this variables 
-
-    static HRESULT init_direct_factory_and_render_target_windows(const HWND* const static_windows_handle_ptr , ID2D1Factory** factory_ptr_ptr , ID2D1HwndRenderTarget** current_windows_renders_target_ptr_ptr) {
-        HRESULT output_result {};
-        
-        if (SUCCEEDED(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED, factory_ptr_ptr))) {
-            RECT static_windows_clients_rects_values{};
-
-            if (!GetClientRect(*static_windows_handle_ptr , &static_windows_clients_rects_values)) {
-                std::cout << "Error at getting the current rects values " << '\n';
-                return 0;
-            }
-
-            D2D1_HWND_RENDER_TARGET_PROPERTIES static_windows_properties{ .hwnd{*static_windows_handle_ptr} , .pixelSize{ D2D1::SizeU(static_windows_clients_rects_values.right , static_windows_clients_rects_values.bottom) } ,
-            .presentOptions{D2D1_PRESENT_OPTIONS_IMMEDIATELY} };
-            output_result = (*factory_ptr_ptr)->CreateHwndRenderTarget(D2D1::RenderTargetProperties() , static_windows_properties ,current_windows_renders_target_ptr_ptr);
+            static_windows_factory_ptr.back()->CreateHwndRenderTarget(D2D1::RenderTargetProperties(), current_windows_properties, &static_windows_target_ptr.back());
         }
 
 
@@ -84,20 +68,25 @@ public :
     // #10 Subclass input static class windows into the static_windows_proc procedure 
 
     void operator()(const HWND* const input_static_windows_handle_ptr) {
-        static_class_windows_handle = *input_static_windows_handle_ptr;
-        static int current_windows_subclass_id { 1 };
-        LONG_PTR input_windows_style{ GetWindowLongPtr(*input_static_windows_handle_ptr , GWL_STYLE) };
 
-        if (((WNDPROC)GetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_USERDATA) == nullptr) && ((input_windows_style & SS_NOTIFY) && (input_windows_style & SS_OWNERDRAW) && (input_windows_style & WS_CHILD))) {
-            WNDPROC old_windows_proc{ (WNDPROC)SetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_WNDPROC, (LONG_PTR)static_windows_proc) };
-            SetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_USERDATA, (LONG_PTR)old_windows_proc);
-            SetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_ID , current_windows_subclass_id);
-            SetWindowSubclass(*input_static_windows_handle_ptr, static_windows_proc, current_windows_subclass_id, 0);
-            ++current_windows_subclass_id;
 
-            // #16 resize the vectors to avoid the segmentation fault in rum time while push backing the geometries infos 
-            static_windows_custom_direct_2d_geometries.resize(current_windows_subclass_id);
-            // #16
+        if (GetDlgCtrlID(static_class_windows_handle) == 0) {
+            static_class_windows_handle = *input_static_windows_handle_ptr;
+            static int current_windows_subclass_id { 1 };
+            LONG_PTR input_windows_style{ GetWindowLongPtr(*input_static_windows_handle_ptr , GWL_STYLE) };
+
+            if (((WNDPROC)GetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_USERDATA) == nullptr) && ((input_windows_style & SS_NOTIFY) && (input_windows_style & SS_OWNERDRAW) && (input_windows_style & WS_CHILD))) {
+                WNDPROC old_windows_proc{ (WNDPROC)SetWindowLongPtr(*input_static_windows_handle_ptr, GWLP_WNDPROC, (LONG_PTR)static_windows_proc) };
+                SetWindowLongPtr(static_class_windows_handle, GWLP_USERDATA, (LONG_PTR)old_windows_proc);
+                SetWindowLongPtr(static_class_windows_handle, GWLP_ID, current_windows_subclass_id);
+                SetWindowSubclass(static_class_windows_handle, static_windows_proc, current_windows_subclass_id, 0);
+                init_direct_factory_and_render_target_windows(&static_class_windows_handle , current_windows_subclass_id);
+                ++current_windows_subclass_id;
+
+                // #16 resize the vectors to avoid the segmentation fault in rum time while push backing the geometries infos 
+                static_windows_custom_direct_2d_geometries.resize(current_windows_subclass_id);
+                // #16
+            }
         }
     }
 
@@ -105,36 +94,36 @@ public :
 
     // #12 Use SFINAE principle to get the right function with sutiable inputs that depends on the custom geometry being moveable or non-moveable 
 
-    template<bool is_moving_geometry , GeometriesShape shape , Direct2DPredefineBrushType fills_brush_type , Direct2DPredefineBrushType strokes_brush_type>
-    typename std::enable_if<!is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<fills_brush_type , strokes_brush_type> style) {
+    template<bool is_moving_geometry , GeometriesShape shape , typename FillsBrushType , typename StrokesBrushType>
+    typename std::enable_if<!is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType , StrokesBrushType> style) {
         // # 17 Wrap the geometries info and store in base class 
         
-        Direct2DGeometriesInfo<is_moving_geometry, shape, fills_brush_type, strokes_brush_type> concrete_type_geometries_info{};
+        Direct2DGeometriesInfo<is_moving_geometry, shape, FillsBrushType, StrokesBrushType> concrete_type_geometries_info{};
         concrete_type_geometries_info.geometries_dimension_values = dimension_values;
         concrete_type_geometries_info.geometries_style = style;
         
-        if (update_the_render_target(&static_class_windows_handle)) {
-
-            if (!SUCCEEDED(init_direct_factory_and_render_target_windows(&static_class_windows_handle, &current_static_windows_factory_ptr, &current_static_windows_target_ptr))) {
-                std::cout << "Error at setting the windows render target " << '\n';
-            }
-        }
         
-        auto geometry_function{ set_direct_2d_geometry_function<typename ShapeToDimensionType<shape>::Geometry>(&current_static_windows_factory_ptr) };
+        auto geometry_function{ set_direct_2d_geometry_function<typename ShapeToDimensionType<shape>::Geometry>(&static_windows_factory_ptr[GetDlgCtrlID(static_class_windows_handle) - 1]) };
         geometry_function(concrete_type_geometries_info.geometries_dimension_values , &concrete_type_geometries_info.shapes_geometry);
-        static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, fills_brush_type, strokes_brush_type>>(concrete_type_geometries_info));
+        set_brush<FillsBrushType>(&static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1] , &concrete_type_geometries_info.geometries_style.fills_brush_info , &concrete_type_geometries_info.geometries_style.fills_brush_ptr);
         
+        set_brush<StrokesBrushType>(&static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1] , &concrete_type_geometries_info.geometries_style.strokes_brush_info , &concrete_type_geometries_info.geometries_style.strokes_brush_ptr);
+
+        static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, FillsBrushType, StrokesBrushType>>(concrete_type_geometries_info));
+
         // #17
     }
 
-    template<bool is_moving_geometry , GeometriesShape shape, Direct2DPredefineBrushType fills_brush_type, Direct2DPredefineBrushType strokes_brush_type, GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
-    typename std::enable_if<is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<fills_brush_type, strokes_brush_type> style ,
+    template<bool is_moving_geometry , GeometriesShape shape , typename FillsBrushType , typename StrokesBrushType , GeometriesMovingCtrl ctrl_type , GeometriesMovingSpace space_type>
+    typename std::enable_if<is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType, StrokesBrushType> style ,
         MovingGeometriesProp<space_type> geometries_ctrl_moving_properties) {
 
+        /*
         Direct2DGeometriesInfo<is_moving_geometry, shape, fills_brush_type, strokes_brush_type , ctrl_type , space_type> concrete_type_geometries_info{};
         concrete_type_geometries_info.geometries_dimension_values = dimension_values;
         concrete_type_geometries_info.geometries_style = style;
         static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, fills_brush_type, strokes_brush_type , ctrl_type , space_type>>(concrete_type_geometries_info));
+        */
     }
 
     // #12
@@ -153,44 +142,106 @@ private :
 
             PAINTSTRUCT windows_paint_info{};
             HDC static_windows_device_context_handle{ BeginPaint(current_static_windows_handle , &windows_paint_info) };
+            static_windows_target_ptr[ id - 1 ]->BeginDraw();
+            static_windows_target_ptr[id - 1]->Clear(D2D1::ColorF(D2D1::ColorF::Black));
 
-            if (update_the_render_target(&current_static_windows_handle)) {
+            for (int static_windows_geometry{ 0 }; static_windows_geometry < static_windows_custom_direct_2d_geometries[id - 1].size(); ++static_windows_geometry) {
+                DimensionVariantPtr current_dimension_ptr { static_windows_custom_direct_2d_geometries[id - 1][static_windows_geometry].get()->get_dimension_ptr() };
+                std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> current_geometries_brushs_ptr_ptr { static_windows_custom_direct_2d_geometries[id - 1][static_windows_geometry].get()->get_geometries_brush() };
+                ID2D1HwndRenderTarget** current_windows_render_target { &static_windows_target_ptr[id - 1] };
+                FLOAT current_geometries_strokes_width{ static_windows_custom_direct_2d_geometries[id - 1][static_windows_geometry].get()->get_strokes_width() };
+                unsigned int current_goemetries_fills_distance_from_stroke{ static_windows_custom_direct_2d_geometries[id - 1][static_windows_geometry].get()->get_fills_distance_from_stroke() };
 
-                if (!SUCCEEDED(init_direct_factory_and_render_target_windows(&current_static_windows_handle, &current_static_windows_factory_ptr, &current_static_windows_target_ptr))) {
-                    std::cout << "Error at setting the windows render target " << '\n';
-                }
+                std::visit([current_windows_render_target , current_geometries_strokes_width , current_goemetries_fills_distance_from_stroke, id](auto&& dimension , auto&& fill_brush_ptr_ptr, auto&& stroke_brush_ptr_ptr) {
+                    using CurrentDimensionType = std::decay_t<decltype(dimension)>;
+
+                    if (fill_brush_ptr_ptr && stroke_brush_ptr_ptr) {
+
+                        if constexpr (std::is_same_v<CurrentDimensionType, D2D1_ELLIPSE*>) {
+                            D2D1_ELLIPSE fills_dimension_with_distance{ *dimension };
+                            fills_dimension_with_distance.radiusX -= static_cast<FLOAT>(current_goemetries_fills_distance_from_stroke);
+                            fills_dimension_with_distance.radiusY -= static_cast<FLOAT>(current_goemetries_fills_distance_from_stroke);
+                            (*current_windows_render_target)->FillEllipse(fills_dimension_with_distance, *fill_brush_ptr_ptr);
+                            (*current_windows_render_target)->DrawEllipse(dimension, *stroke_brush_ptr_ptr, current_geometries_strokes_width, 0);
+                        }
+
+                        else if constexpr (std::is_same_v<CurrentDimensionType, D2D1_RECT_F*>) {
+                            D2D1_RECT_F fills_dimension_with_distance{ *dimension };
+                            fills_dimension_with_distance.left += current_goemetries_fills_distance_from_stroke;
+                            fills_dimension_with_distance.top += current_goemetries_fills_distance_from_stroke;
+                            fills_dimension_with_distance.right -= current_goemetries_fills_distance_from_stroke;
+                            fills_dimension_with_distance.bottom -= current_goemetries_fills_distance_from_stroke;
+
+                            (*current_windows_render_target)->FillRectangle(fills_dimension_with_distance , *fill_brush_ptr_ptr);
+                            (*current_windows_render_target)->DrawRectangle(dimension, *stroke_brush_ptr_ptr, current_geometries_strokes_width, 0);
+                        }
+
+                        else {
+                            D2D1_ROUNDED_RECT fills_dimension_with_distance{ *dimension };
+                            FLOAT original_x_centers_corner{ dimension->rect.left + dimension->radiusX };
+                            FLOAT original_y_centers_corner{ dimension->rect.top + dimension->radiusY };
+
+                            fills_dimension_with_distance.rect.left += current_goemetries_fills_distance_from_stroke;
+                            fills_dimension_with_distance.rect.top += current_goemetries_fills_distance_from_stroke;
+                            fills_dimension_with_distance.rect.right -= current_goemetries_fills_distance_from_stroke;
+                            fills_dimension_with_distance.rect.bottom -= current_goemetries_fills_distance_from_stroke;
+                            
+                            fills_dimension_with_distance.radiusX = original_x_centers_corner - fills_dimension_with_distance.rect.left;
+                            fills_dimension_with_distance.radiusY = original_y_centers_corner - fills_dimension_with_distance.rect.top;
+
+
+                            std::cout << '\n';
+                            std::cout << "Old Width : " << dimension->rect.right - dimension->rect.left << '\n';
+                            std::cout << "Old Height : " << dimension->rect.bottom - dimension->rect.top << '\n';
+                            std::cout << "Old left : " << dimension->rect.left << '\n';
+                            std::cout << "Old Top : " << dimension->rect.top << '\n';
+                            std::cout << "original_x_centers_corner : " << original_x_centers_corner << '\n';
+                            std::cout << "original_y_centers_corner : " << original_y_centers_corner << '\n';
+                            std::cout << "Old radiusX : " << dimension->radiusX << '\n';
+                            std::cout << "Old radiusY : " << dimension->radiusY << '\n';
+                            std::cout << '\n';
+ 
+                            std::cout << '\n';
+                            std::cout << "New Width : " << fills_dimension_with_distance.rect.right - fills_dimension_with_distance.rect.left << '\n';
+                            std::cout << "New Height : " << fills_dimension_with_distance.rect.bottom - fills_dimension_with_distance.rect.top << '\n';
+                            std::cout << "New left : " << fills_dimension_with_distance.rect.left << '\n';
+                            std::cout << "New Top : " << fills_dimension_with_distance.rect.top << '\n';
+                            std::cout << "New radiusX : " << fills_dimension_with_distance.radiusX << '\n';
+                            std::cout << "New radiusY : " << fills_dimension_with_distance.radiusY << '\n';
+                            std::cout << '\n';
+ 
+
+
+
+                            (*current_windows_render_target)->FillRoundedRectangle(fills_dimension_with_distance , *fill_brush_ptr_ptr);
+                            (*current_windows_render_target)->DrawRoundedRectangle(dimension, *stroke_brush_ptr_ptr, current_geometries_strokes_width, 0);
+                        }
+                    }
+
+
+                    ; }, current_dimension_ptr , current_geometries_brushs_ptr_ptr.first, current_geometries_brushs_ptr_ptr.second);
             }
 
-
-            for (int static_windows_geometry{ 0 }; static_windows_geometry < static_windows_custom_direct_2d_geometries[ id - 1].size(); ++static_windows_geometry) {
-            
-            }
-
-
-            EndPaint(current_static_windows_handle, &windows_paint_info);
+            static_windows_target_ptr[ id - 1 ]->EndDraw();
             
             // #20
             break;
         }
 
+
         case WM_MOUSEMOVE: {
-
-            if (update_the_render_target(&current_static_windows_handle)) {
-
-                if (!SUCCEEDED(init_direct_factory_and_render_target_windows(&current_static_windows_handle, &current_static_windows_factory_ptr, &current_static_windows_target_ptr))) {
-                    std::cout << "Error at setting the windows render target " << '\n';
-                }
-            }
-
             break;
         }
 
         case WM_MOUSELEAVE: {
-            std::cout << "WM_MOUSELEAVE " << '\n';
             break;
         }
 
         case WM_KEYDOWN: {
+        
+
+
+            break;
         }
 
         case WM_LBUTTONDOWN: {
@@ -238,75 +289,63 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         a(&static_1);
         b(&static_2);
 
-
-        a.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, Direct2DPredefineBrushType::SOLID, Direct2DPredefineBrushType::SOLID>(D2D1::Ellipse(D2D1::Point2F(30.0f, 30.0f), 50.0f, 50.0f), 
+        a.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, ID2D1SolidColorBrush* , ID2D1SolidColorBrush*>(D2D1::Ellipse(D2D1::Point2F(130.0f, 100.0f), 50.0f, 50.0f),
             
-            { .fills_brush_info{ D2D1::ColorF::BlueViolet } ,
+            { .fills_brush_info{ D2D1::ColorF(D2D1::ColorF::BlueViolet) } ,
               .fills_distance_from_stroke{ 20 } ,
-              .strokes_brush_info{ D2D1::ColorF::Coral } ,
+              .strokes_brush_info{ D2D1::ColorF(D2D1::ColorF::Coral) } ,
               .strokes_width{ 5.5f }
             }
         );
 
+
+        a.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush* , ID2D1SolidColorBrush*>(D2D1::Ellipse(D2D1::Point2F(330.0f, 60.0f), 50.0f, 50.0f),
+            
+            { .fills_brush_info{ D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_WRAP , { {0.3 , D2D1::ColorF(D2D1::ColorF::Coral) } , {0.5 , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.8 , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } } , 
+                D2D1::Point2F(330.0f, 60.0f) , 30.0f , 30.0f } ,
+
+
+              .fills_distance_from_stroke{ 20 } ,
+              .strokes_brush_info{ D2D1::ColorF(D2D1::ColorF::HotPink) } ,
+              .strokes_width{ 10.5f }
+            }
+        );
+
+
+
+        a.add_custom_direct_2d_geometry<false, GeometriesShape::ROUNDED_RECTANGLE, ID2D1LinearGradientBrush*, ID2D1LinearGradientBrush*>({ D2D1::RectF(200.0f , 200.0f , 800.0f , 350.0f) , 60.0f , 60.0f},
+            { .fills_brush_info{ D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_WRAP , { {0.3 , D2D1::ColorF(D2D1::ColorF::Coral) } , {0.5 , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.8 , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } } , { D2D1::Point2F(200.0f , 200.0f) } , { D2D1::Point2F(800.0f , 350.0f) }  } ,
+              
+            .fills_distance_from_stroke{ 30 } ,
+
+
+              .strokes_brush_info{ D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_WRAP , { {0.3 , D2D1::ColorF(D2D1::ColorF::Coral) } , {0.5 , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.8 , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } } , { D2D1::Point2F(200.0f , 200.0f) } , { D2D1::Point2F(800.0f , 350.0f) } } ,
+              .strokes_width{ 10.5f }
+            }
+        );
+
         
-        b.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, Direct2DPredefineBrushType::SOLID, Direct2DPredefineBrushType::SOLID>(D2D1::Ellipse(D2D1::Point2F(50.0f, 50.0f), 90.0f, 90.0f),
-            { .fills_brush_info{ D2D1::ColorF::Aquamarine } ,
+        b.add_custom_direct_2d_geometry<false, GeometriesShape::ELLIPSE, ID2D1SolidColorBrush* , ID2D1SolidColorBrush*>(D2D1::Ellipse(D2D1::Point2F(150.0f, 100.0f), 90.0f, 90.0f),
+            { .fills_brush_info{ D2D1::ColorF(D2D1::ColorF::Aquamarine) } ,
               .fills_distance_from_stroke{ 10 } ,
-              .strokes_brush_info{ D2D1::ColorF::HotPink } ,
+              .strokes_brush_info{ D2D1::ColorF(D2D1::ColorF::HotPink) } ,
               .strokes_width{ 15.5f }
             }
         );
 
-        /*
-        D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &main_windows_factory_ptr);
-        RECT main_windows_clients_rects{};
-        GetClientRect(main_windows_handle, &main_windows_clients_rects);
-        D2D1_HWND_RENDER_TARGET_PROPERTIES hwnd_prop{ .hwnd{main_windows_handle} , .pixelSize{ D2D1::SizeU(main_windows_clients_rects.right , main_windows_clients_rects.bottom) } , .presentOptions{D2D1_PRESENT_OPTIONS_IMMEDIATELY} };
-        HRESULT result_value{ main_windows_factory_ptr->CreateHwndRenderTarget(D2D1::RenderTargetProperties(), hwnd_prop, &main_windows_render_target_ptr) };
-        */
+
+        b.add_custom_direct_2d_geometry<false, GeometriesShape::RECTANGLE, ID2D1LinearGradientBrush*, ID2D1SolidColorBrush*>(D2D1::RectF(400.0f, 100.0f, 700.0f, 200.0f),
+            { .fills_brush_info{ D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_WRAP , { {0.3 , D2D1::ColorF(D2D1::ColorF::Coral) } , {0.5 , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.8 , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } } , { D2D1::Point2F(400.0f , 100.0f) } , { D2D1::Point2F(700.0f , 200.0f) } } ,
+            
+              .fills_distance_from_stroke{ 10 } ,
+              .strokes_brush_info{ D2D1::ColorF(D2D1::ColorF::Violet) } ,
+              .strokes_width{ 10.5f }
+            }
+        );
+
         
         break;
 	}
-
-    /*
-    case WM_PAINT: {
-        PAINTSTRUCT paint_info{};
-        HDC device_context_handle{ BeginPaint(main_windows_handle , &paint_info) };
-
-        
-        main_windows_render_target_ptr->BeginDraw();
-        ID2D1SolidColorBrush* solid_brush_ptr{ nullptr };
-        ID2D1LinearGradientBrush* linear_gradient_brush_ptr{ nullptr };
-        ID2D1RadialGradientBrush* radial_gradient_brush_ptr{ nullptr };
-        D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES linear_prop{ .startPoint{D2D1::Point2F(240.0f , 240.0f)} , .endPoint{D2D1::Point2F(300.0f , 300.0f)} };
-        D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES radial_prop{ .center{D2D1::Point2F(300.0f , 300.0f)} , .radiusX{ 40.0f } , .radiusY{ 40.0f } };
-
-        ID2D1GradientStopCollection* stop_collection_ptr { nullptr };
-        D2D1_GRADIENT_STOP stops[4]{ {0.1f , D2D1::ColorF(D2D1::ColorF::Aqua) } , { 0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , { 0.5f , D2D1::ColorF(D2D1::ColorF::Coral) }, { 0.8f , D2D1::ColorF(D2D1::ColorF::HotPink) } };
-        main_windows_render_target_ptr->CreateGradientStopCollection(stops, 4, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_WRAP, &stop_collection_ptr);
-
-        main_windows_render_target_ptr->CreateLinearGradientBrush(linear_prop , stop_collection_ptr , &linear_gradient_brush_ptr);
-        main_windows_render_target_ptr->CreateRadialGradientBrush(radial_prop , stop_collection_ptr , &radial_gradient_brush_ptr);
-
-        //main_windows_factory_ptr->CreateEllipseGeometry( ,);
-
-        main_windows_render_target_ptr->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::BlueViolet) , &solid_brush_ptr);
-        //main_windows_render_target_ptr->CreateLinearGradientBrush( , );
-
-
-        main_windows_render_target_ptr->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(300.0f, 300.0f), 100.0f, 100.0f) , radial_gradient_brush_ptr , 10.0f);
-        main_windows_render_target_ptr->FillEllipse(D2D1::Ellipse(D2D1::Point2F(300.0f, 300.0f), 60.0f, 60.0f) , radial_gradient_brush_ptr);
-
-
-
-        main_windows_render_target_ptr->EndDraw();
-
-
-        EndPaint(main_windows_handle, &paint_info);
-        return 0;
-    }
-    */
-
 
 	default: {
 		return DefWindowProc(main_windows_handle, message_type, word_parameter, long_parameter);
@@ -344,6 +383,7 @@ void execute_the_main_window(COLORREF background_color) {
 // #2
 
 
+
 int main() {
     execute_the_main_window(RGB(0 , 0 , 0));
 
@@ -351,4 +391,10 @@ int main() {
     return 0;
 }
 
-// last comment #20
+// last comment #22
+
+// deleted comments = #15
+
+/*
+// run time crash when you dont init fills brush prop or strokes brush prop
+*/
