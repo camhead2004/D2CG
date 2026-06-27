@@ -179,6 +179,7 @@ public:
     virtual ~Direct2DGeometriesBase() = default;
     virtual bool is_static_geometry() = 0;
     virtual DimensionVariantPtr get_dimension_ptr() = 0;
+    virtual D2D1_POINT_2F get_geometries_center_position(DimensionVariantPtr geometries_dimension_ptr) = 0;
     virtual void set_geometries_new_coordinate(ID2D1Factory** static_windows_factory_ptr_ptr, DimensionVariantPtr dimension_ptr, GeometriesVariantPtrPtr geometry_ptr_ptr, D2D1_POINT_2F* new_coordinate) = 0;
     virtual std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> get_geometries_brush() = 0;
     virtual GeometriesVariantPtrPtr get_shapes_geometry_ptr_ptr() = 0;
@@ -216,17 +217,38 @@ public:
         return &geos_info.geometries_dimension_values;
     }
 
+    D2D1_POINT_2F get_geometries_center_position(DimensionVariantPtr geometries_dimension_ptr) override {
+
+        return std::visit([](auto&& dimension)->D2D1_POINT_2F {
+            using CurrentDimensionType = std::decay_t<decltype(dimension)>;
+
+            if constexpr (std::is_same_v<CurrentDimensionType, D2D1_ELLIPSE*>) {
+                return dimension->point;
+            }
+
+            else if constexpr (std::is_same_v<CurrentDimensionType, D2D1_RECT_F*>) {
+                D2D1_POINT_2F rectangle_size{ D2D1::Point2F(dimension->right - dimension->left , dimension->bottom - dimension->top) };
+                return D2D1::Point2F(dimension->left + (rectangle_size.x / 2.0f), dimension->top + (rectangle_size.y / 2.0f));
+            }
+
+            else if constexpr (std::is_same_v <CurrentDimensionType, D2D1_ROUNDED_RECT*>) {
+                D2D1_POINT_2F rectangle_size{ D2D1::Point2F(dimension->rect.right - dimension->rect.left , dimension->rect.bottom - dimension->rect.top) };
+                return D2D1::Point2F(dimension->rect.left + (rectangle_size.x / 2.0f), dimension->rect.top + (rectangle_size.y / 2.0f));
+            }
+            ;}, geometries_dimension_ptr);
+    }
+
     void set_geometries_new_coordinate(ID2D1Factory** static_windows_factory_ptr_ptr , DimensionVariantPtr dimension_ptr , GeometriesVariantPtrPtr geometry_ptr_ptr , D2D1_POINT_2F* new_coordinate) override {
 
         std::visit([static_windows_factory_ptr_ptr , dimension_ptr, new_coordinate](auto&& dimension, auto&& geometry_ptr_ptr) {
             using CurrentDimensionType = std::decay_t<decltype(dimension)>;
             using CurrentGeometryType = std::decay_t<decltype(geometry_ptr_ptr)>;
 
-
             if constexpr (std::is_same_v<CurrentDimensionType, D2D1_ELLIPSE*> && std::is_same_v<CurrentGeometryType , ID2D1EllipseGeometry**>) {
                 D2D1_ELLIPSE* new_ellipse_dimension_ptr{ dimension };
                 new_ellipse_dimension_ptr->point.x += new_coordinate->x;
                 new_ellipse_dimension_ptr->point.y += new_coordinate->y;
+
                 (*static_windows_factory_ptr_ptr)->CreateEllipseGeometry(*dimension, geometry_ptr_ptr);
             }
 
