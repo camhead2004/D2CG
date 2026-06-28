@@ -169,6 +169,24 @@ public:
     MovingGeometriesProp moving_properties;
 };
 
+
+// #30 Encapsulate geometries info to get all data needed to set geometries data on windows procedure
+
+struct GeometriesEssentialInfoInProc{
+    GeometriesVariantPtrPtr current_shapes_geometry_variant{};
+    DimensionVariantPtr current_geos_dimension_variant{};
+    std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> current_geometries_brush_variant{};
+    FLOAT current_strokes_width{};
+    unsigned int current_fills_distance_from_stroke{};
+    const MovingGeometriesProp* current_moving_properties_ptr {};
+    GeometriesMovingCtrl current_moving_ctrl_type{};
+    GeometriesMovingSpace current_moving_space_type {};
+    D2D1_POINT_2F current_geometries_center_coordinate{};
+};
+
+// #30
+
+
 // #8
 
 
@@ -193,6 +211,9 @@ public:
     virtual const MovingGeometriesProp* get_moving_geometries_arrow_key_and_mouse_wheel_direction() { return {}; };
 
     // #24
+
+
+    virtual void get_geometries_essential_info_in_run_time(GeometriesEssentialInfoInProc* geometries_info_ptr) = 0;
 };
 
 
@@ -304,6 +325,17 @@ public:
         return geos_info.geometries_style.strokes_width;
     };
 
+    void get_geometries_essential_info_in_run_time(GeometriesEssentialInfoInProc* geometries_info_ptr) override {
+        geometries_info_ptr->current_shapes_geometry_variant = get_shapes_geometry_ptr_ptr();
+        geometries_info_ptr->current_geos_dimension_variant = get_dimension_ptr();
+        geometries_info_ptr->current_geometries_brush_variant = get_geometries_brush();
+        geometries_info_ptr->current_strokes_width = get_strokes_width();
+        geometries_info_ptr->current_fills_distance_from_stroke = get_fills_distance_from_stroke();
+        geometries_info_ptr->current_moving_properties_ptr = get_moving_geometries_arrow_key_and_mouse_wheel_direction();
+        geometries_info_ptr->current_moving_ctrl_type = get_ctrl_type();
+        geometries_info_ptr->current_moving_space_type = get_moving_space_type();
+        geometries_info_ptr->current_geometries_center_coordinate = get_geometries_center_position(geometries_info_ptr->current_geos_dimension_variant);
+    }
 
 
 };

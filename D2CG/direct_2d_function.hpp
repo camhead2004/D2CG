@@ -60,9 +60,11 @@ std::enable_if<std::is_same_v<BrushType, ID2D1LinearGradientBrush*> , void>::typ
     ID2D1GradientStopCollection* linear_gradients_stop_collection_ptr{ nullptr };
     D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES linear_gradient_prop{ .startPoint{ brush_info_ptr->linear_gradients_start_point } , .endPoint{ brush_info_ptr->linear_gradients_end_point} };
 
-    (*windows_render_target_ptr_ptr)->CreateGradientStopCollection(brush_info_ptr->gradients_stops.data(), brush_info_ptr->gradients_stops.size(), brush_info_ptr->gamma_value, brush_info_ptr->extention_value, &linear_gradients_stop_collection_ptr);
+    if (brush_info_ptr->gradients_stops.data()) {
+        (*windows_render_target_ptr_ptr)->CreateGradientStopCollection(brush_info_ptr->gradients_stops.data(), brush_info_ptr->gradients_stops.size(), brush_info_ptr->gamma_value, brush_info_ptr->extention_value, &linear_gradients_stop_collection_ptr);
 
-    create_direct_2d_brush_function(linear_gradient_prop, linear_gradients_stop_collection_ptr, brush_ptr_ptr);
+        create_direct_2d_brush_function(linear_gradient_prop, linear_gradients_stop_collection_ptr, brush_ptr_ptr);
+    }
 }
 
 template<typename BrushType>
@@ -70,11 +72,13 @@ std::enable_if<std::is_same_v<BrushType, ID2D1RadialGradientBrush*> , void>::typ
     auto create_direct_2d_brush_function{ create_brush_function_type<BrushType>(windows_render_target_ptr_ptr) };
     ID2D1GradientStopCollection* radial_gradients_stop_collection_ptr{ nullptr };
     D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES radial_gradient_prop{ .center{ brush_info_ptr->center } , .gradientOriginOffset{D2D1::Point2F(0.0f , 0.0f)} , .radiusX{ brush_info_ptr->x_radius } , .radiusY{ brush_info_ptr->y_radius } };
+    
+    if (brush_info_ptr->gradients_stops.data()) {
+        (*windows_render_target_ptr_ptr)->CreateGradientStopCollection(brush_info_ptr->gradients_stops.data(), brush_info_ptr->gradients_stops.size(), brush_info_ptr->gamma_value, brush_info_ptr->extention_value, &radial_gradients_stop_collection_ptr);
 
-    (*windows_render_target_ptr_ptr)->CreateGradientStopCollection(brush_info_ptr->gradients_stops.data(), brush_info_ptr->gradients_stops.size(), brush_info_ptr->gamma_value, brush_info_ptr->extention_value, &radial_gradients_stop_collection_ptr);
-
-    create_direct_2d_brush_function(radial_gradient_prop, radial_gradients_stop_collection_ptr, brush_ptr_ptr);
-}
+        create_direct_2d_brush_function(radial_gradient_prop, radial_gradients_stop_collection_ptr, brush_ptr_ptr);
+    }
+ }
 
 // #22
 
