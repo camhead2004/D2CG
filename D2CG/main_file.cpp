@@ -102,20 +102,24 @@ public :
 
     // #12 Use SFINAE principle to get the right function with sutiable inputs that depends on the custom geometry being moveable or non-moveable 
 
+    template<bool is_moving_geometry, GeometriesShape shape, typename FillsBrushType, typename StrokesBrushType>
+    void set_input_geometries_info(auto input_geometries_info_ptr , ID2D1Factory** static_windows_factory_ptr_ptr , ID2D1HwndRenderTarget** windows_render_target_ptr_ptr , typename ShapeToDimensionType<shape>::Dimension dimension_values ,  GeometriesCustomStyle<FillsBrushType , StrokesBrushType> style) {
+        
+        input_geometries_info_ptr->geometries_dimension_values = dimension_values;
+        input_geometries_info_ptr->geometries_style = style;
+        auto geometry_function{ set_direct_2d_geometry_function<typename ShapeToDimensionType<shape>::Geometry>(static_windows_factory_ptr_ptr) };
+        geometry_function(input_geometries_info_ptr->geometries_dimension_values, &input_geometries_info_ptr->shapes_geometry);
+        set_brush<FillsBrushType>(windows_render_target_ptr_ptr , &input_geometries_info_ptr->geometries_style.fills_brush_info, &input_geometries_info_ptr->geometries_style.fills_brush_ptr);
+        set_brush<StrokesBrushType>(windows_render_target_ptr_ptr , &input_geometries_info_ptr->geometries_style.strokes_brush_info, &input_geometries_info_ptr->geometries_style.strokes_brush_ptr);
+    }
+
     template<bool is_moving_geometry , GeometriesShape shape , typename FillsBrushType , typename StrokesBrushType>
     typename std::enable_if<!is_moving_geometry, void>::type add_custom_direct_2d_geometry(typename ShapeToDimensionType<shape>::Dimension dimension_values, GeometriesCustomStyle<FillsBrushType , StrokesBrushType> style) {
         // # 17 Wrap static geometries info and store in base class 
         
         Direct2DGeometriesInfo<is_moving_geometry, shape, FillsBrushType, StrokesBrushType> concrete_type_geometries_info{};
-        concrete_type_geometries_info.geometries_dimension_values = dimension_values;
-        concrete_type_geometries_info.geometries_style = style;
         
-        
-        auto geometry_function{ set_direct_2d_geometry_function<typename ShapeToDimensionType<shape>::Geometry>(&static_windows_factory_ptr[GetDlgCtrlID(static_class_windows_handle) - 1]) };
-        geometry_function(concrete_type_geometries_info.geometries_dimension_values , &concrete_type_geometries_info.shapes_geometry);
-        set_brush<FillsBrushType>(&static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1] , &concrete_type_geometries_info.geometries_style.fills_brush_info , &concrete_type_geometries_info.geometries_style.fills_brush_ptr);
-        
-        set_brush<StrokesBrushType>(&static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1] , &concrete_type_geometries_info.geometries_style.strokes_brush_info , &concrete_type_geometries_info.geometries_style.strokes_brush_ptr);
+        set_input_geometries_info<is_moving_geometry, shape, FillsBrushType, StrokesBrushType>(&concrete_type_geometries_info, &static_windows_factory_ptr[GetDlgCtrlID(static_class_windows_handle) - 1], &static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1], dimension_values, style);
 
         static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, FillsBrushType, StrokesBrushType>>(concrete_type_geometries_info));
         // #17
@@ -128,14 +132,11 @@ public :
         // #23 Wrap moving geometries info and store in base class 
 
         Direct2DGeometriesInfo<is_moving_geometry, shape, FillsBrushType , StrokesBrushType , ctrl_type , space_type> concrete_type_geometries_info{};
-        concrete_type_geometries_info.geometries_dimension_values = dimension_values;
-        concrete_type_geometries_info.geometries_style = style;
-        concrete_type_geometries_info.moving_properties = geometries_ctrl_moving_properties;
-        auto geometry_function{ set_direct_2d_geometry_function<typename ShapeToDimensionType<shape>::Geometry>(&static_windows_factory_ptr[GetDlgCtrlID(static_class_windows_handle) - 1]) };
-        geometry_function(concrete_type_geometries_info.geometries_dimension_values, &concrete_type_geometries_info.shapes_geometry);
-        set_brush<FillsBrushType>(&static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1], &concrete_type_geometries_info.geometries_style.fills_brush_info, &concrete_type_geometries_info.geometries_style.fills_brush_ptr);
-        set_brush<StrokesBrushType>(&static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1], &concrete_type_geometries_info.geometries_style.strokes_brush_info, &concrete_type_geometries_info.geometries_style.strokes_brush_ptr);
+        
+        set_input_geometries_info<is_moving_geometry, shape, FillsBrushType, StrokesBrushType>(&concrete_type_geometries_info, &static_windows_factory_ptr[GetDlgCtrlID(static_class_windows_handle) - 1],
+            &static_windows_target_ptr[GetDlgCtrlID(static_class_windows_handle) - 1], dimension_values, style);
 
+        concrete_type_geometries_info.moving_properties = geometries_ctrl_moving_properties;
         static_windows_custom_direct_2d_geometries[GetDlgCtrlID(static_class_windows_handle) - 1].push_back(std::make_unique<GeometriesWrapper<is_moving_geometry, shape, FillsBrushType , StrokesBrushType , ctrl_type , space_type>>(concrete_type_geometries_info));
 
         // #23 
@@ -195,12 +196,36 @@ private :
     }
 
 
+    static void set_moving_geometries_coordinate_in_left_click_events(const HWND* const static_windows_handle_ptr, UINT procedure_id, Direct2DGeometriesBase* moving_geometries_info, GeometriesEssentialInfoInProc* current_geometries_info_procs_data_ptr, const std::pair<unsigned int, unsigned int>* const focused_moving_geometry_ptr, bool left_clicked_hold) {
+
+        moving_geometries_info->get_geometries_essential_info_in_run_time(current_geometries_info_procs_data_ptr);
+
+        if (current_geometries_info_procs_data_ptr->current_moving_ctrl_type & ((left_clicked_hold) ? GeometriesMovingCtrl::LEFT_CLICKED_HOLD : GeometriesMovingCtrl::LEFT_CLICKED)) {
+            POINT current_clicked_cursor_position{ get_cursor_position_in_screen_client(static_windows_handle_ptr) };
+            D2D1_POINT_2F new_clicked_coordinate{ D2D1::Point2F(0.0f , 0.0f) };
+
+            if ((current_geometries_info_procs_data_ptr->current_moving_space_type == GeometriesMovingSpace::X_AXIS_ONLY) || (current_geometries_info_procs_data_ptr->current_moving_space_type == GeometriesMovingSpace::FREE)) {
+                new_clicked_coordinate.x = current_clicked_cursor_position.x - current_geometries_info_procs_data_ptr->current_geometries_center_coordinate.x;
+            }
+
+            if ((current_geometries_info_procs_data_ptr->current_moving_space_type == GeometriesMovingSpace::Y_AXIS_ONLY) || (current_geometries_info_procs_data_ptr->current_moving_space_type == GeometriesMovingSpace::FREE)) {
+                new_clicked_coordinate.y = current_clicked_cursor_position.y - current_geometries_info_procs_data_ptr->current_geometries_center_coordinate.y;
+            }
+
+            static_windows_custom_direct_2d_geometries[focused_moving_geometry_ptr->first][focused_moving_geometry_ptr->second].get()->set_geometries_new_coordinate(&static_windows_factory_ptr[procedure_id - 1],
+                current_geometries_info_procs_data_ptr->current_geos_dimension_variant, current_geometries_info_procs_data_ptr->current_shapes_geometry_variant, &new_clicked_coordinate);
+
+            InvalidateRect(*static_windows_handle_ptr, 0, TRUE);
+        }
+    }
+
     // #11 A static class windows procedure to paint custom direct 2d geometries based on the geometries infos container 
 
     static LRESULT CALLBACK static_windows_proc(HWND current_static_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter , UINT_PTR id , DWORD_PTR procs_data) {
         WNDPROC old_windows_procedure{ (WNDPROC)GetWindowLongPtr(current_static_windows_handle , GWLP_USERDATA) };
-        static std::pair<unsigned int, unsigned int> current_focused_moving_geometry{};
+        static std::pair<unsigned int, unsigned int> current_focused_moving_geometry{ -1 , -1 };
         GeometriesEssentialInfoInProc current_geometries_info_procs_data{};
+        TRACKMOUSEEVENT mouse_tracker{ sizeof(TRACKMOUSEEVENT) , TME_LEAVE , current_static_windows_handle , 0 };
 
         switch (message_type) {
 
@@ -272,36 +297,18 @@ private :
 
 
         case WM_MOUSEMOVE: {
-            
-            if (word_parameter & MK_LBUTTON) {
+            TrackMouseEvent(&mouse_tracker);
 
-                if (current_focused_moving_geometry.first != -1 && current_focused_moving_geometry.second != -1) {
-                    static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->get_geometries_essential_info_in_run_time(&current_geometries_info_procs_data);
-
-                    if (current_geometries_info_procs_data.current_moving_ctrl_type & GeometriesMovingCtrl::LEFT_CLICKED_HOLD) {
-                        POINT current_clicked_cursor_position{ get_cursor_position_in_screen_client(&current_static_windows_handle) };
-                        D2D1_POINT_2F new_clicked_coordinate{ D2D1::Point2F(0.0f , 0.0f) };
-
-                        if ((current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::X_AXIS_ONLY) || (current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::FREE)) {
-                            new_clicked_coordinate.x = current_clicked_cursor_position.x - current_geometries_info_procs_data.current_geometries_center_coordinate.x;
-                        }
-
-                        if ((current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::Y_AXIS_ONLY) || (current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::FREE)) {
-                            new_clicked_coordinate.y = current_clicked_cursor_position.y - current_geometries_info_procs_data.current_geometries_center_coordinate.y;
-                        }
-
-                        static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->set_geometries_new_coordinate(&static_windows_factory_ptr[id - 1],
-                            current_geometries_info_procs_data.current_geos_dimension_variant, current_geometries_info_procs_data.current_shapes_geometry_variant, &new_clicked_coordinate);
-
-                        InvalidateRect(current_static_windows_handle, 0, TRUE);
-                    }
-                }
+            if (word_parameter & MK_LBUTTON && (current_focused_moving_geometry.first != -1 && current_focused_moving_geometry.second != -1)) {
+                set_moving_geometries_coordinate_in_left_click_events(&current_static_windows_handle , id , static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get(),
+                    &current_geometries_info_procs_data, &current_focused_moving_geometry, true);
             }
             
             break;
         }
 
         case WM_MOUSELEAVE: {
+            current_focused_moving_geometry = { -1 , -1 };
             break;
         }
 
@@ -315,7 +322,6 @@ private :
                 GeometriesMovingSpace moving_space{ static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->get_moving_space_type() };
 
                 if (ctrl_type & GeometriesMovingCtrl::ARROW_KEY) {
-
                     const MovingGeometriesProp* current_geometries_moving_prop{ static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->get_moving_geometries_arrow_key_and_mouse_wheel_direction() };
 
                     DimensionVariantPtr current_geometries_dimension_ptr{ static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->get_dimension_ptr() };
@@ -345,8 +351,10 @@ private :
 
                     }
 
+
+
                     static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->set_geometries_new_coordinate(&static_windows_factory_ptr[id - 1], current_geometries_dimension_ptr, current_geometries_ptr_ptr, &new_moving_geometries_position);
-       
+
                     InvalidateRect(current_static_windows_handle, 0, TRUE);
                     
                 }
@@ -405,9 +413,7 @@ private :
                 if (!static_windows_custom_direct_2d_geometries[id - 1][current_geometry].get()->is_static_geometry()) {
                     SetFocus(current_static_windows_handle);
                     POINT current_cursor_position{ get_cursor_position_in_screen_client(&current_static_windows_handle) };
-                    static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->get_geometries_essential_info_in_run_time(&current_geometries_info_procs_data);
-
-
+                    static_windows_custom_direct_2d_geometries[id - 1][current_geometry].get()->get_geometries_essential_info_in_run_time(&current_geometries_info_procs_data);
                     std::visit([current_cursor_position , current_geometries_info_procs_data , id , current_geometry](auto&& geometry_ptr_ptr) {
                         BOOL is_fills_clicked{};
                         BOOL is_strokes_clicked{};
@@ -420,7 +426,6 @@ private :
                         }
 
                         ; }, current_geometries_info_procs_data.current_shapes_geometry_variant);
-
                 }
             }
             
@@ -429,26 +434,8 @@ private :
             // #28 Upadate the moving geometries position in (ctrl_type & GeometriesMovingControl::LEFT_CLICKED)
             
             if (current_focused_moving_geometry.first != -1 && current_focused_moving_geometry.second != -1) {
-                static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->get_geometries_essential_info_in_run_time(&current_geometries_info_procs_data);
-
-                if (current_geometries_info_procs_data.current_moving_ctrl_type & GeometriesMovingCtrl::LEFT_CLICKED) {
-                    POINT current_clicked_cursor_position{ get_cursor_position_in_screen_client(&current_static_windows_handle) };
-                    D2D1_POINT_2F new_clicked_coordinate { D2D1::Point2F(0.0f , 0.0f) };
-
-                    if ((current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::X_AXIS_ONLY) || (current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::FREE)) {
-                        new_clicked_coordinate.x = current_clicked_cursor_position.x - current_geometries_info_procs_data.current_geometries_center_coordinate.x;
-                    }
-
-                    if ((current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::Y_AXIS_ONLY) || (current_geometries_info_procs_data.current_moving_space_type == GeometriesMovingSpace::FREE)) {
-                        new_clicked_coordinate.y = current_clicked_cursor_position.y - current_geometries_info_procs_data.current_geometries_center_coordinate.y;
-                    }
-                    
-                    static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get()->set_geometries_new_coordinate(&static_windows_factory_ptr[id - 1],
-                        current_geometries_info_procs_data.current_geos_dimension_variant, current_geometries_info_procs_data.current_shapes_geometry_variant, &new_clicked_coordinate);
-
-                    InvalidateRect(current_static_windows_handle, 0, TRUE);
-                }
-            
+                set_moving_geometries_coordinate_in_left_click_events(&current_static_windows_handle, id, static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get(),
+                    &current_geometries_info_procs_data, &current_focused_moving_geometry, false);
             }
 
             // #28
@@ -491,49 +478,62 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
 
 	switch (message_type) {
 
-	case WM_CREATE: {
+    case WM_CREATE: {
         HWND run_time_terminals_windows_handle{ GetConsoleWindow() };
-        auto run_time_terminals_windows_rects_values_ptr { get_screens_coordinate() };
+        auto run_time_terminals_windows_rects_values_ptr{ get_screens_coordinate() };
         SetWindowPos(run_time_terminals_windows_handle, 0, run_time_terminals_windows_rects_values_ptr->right - 500, 0, 500, 400, 0);
-        
-        static_1 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 10, 900, 380, main_windows_handle, 0 , ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
-        static_2 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 400, 900, 340, main_windows_handle, 0 , ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
+
+        static_1 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 10, 900, 380, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
+        static_2 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 400, 900, 340, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
         a(&static_1);
         b(&static_2);
 
-        a.add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1SolidColorBrush*, ID2D1SolidColorBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::MOUSEWHEEL | GeometriesMovingCtrl::LEFT_CLICKED, GeometriesMovingSpace::X_AXIS_ONLY>(D2D1::Ellipse(D2D1::Point2F(130.0f, 100.0f), 50.0f, 50.0f),
-
-            { .fills_brush_info{ D2D1::ColorF(D2D1::ColorF::BlueViolet) } ,
-              .fills_distance_from_stroke{ 20 } ,
-              .strokes_brush_info{ D2D1::ColorF(D2D1::ColorF::Coral) } ,
-              .strokes_width{ 5.5f }
-            }
-
-            ,
-
-            { { XYDirection::LEFT , XYDirection::RIGHT , XYDirection::RIGHT , XYDirection::LEFT} , { XYDirection::RIGHT , XYDirection::LEFT } }
-        );
-
-
-
-        b.add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED_HOLD, GeometriesMovingSpace::FREE>(D2D1::Ellipse(D2D1::Point2F(130.0f, 100.0f), 100.0f, 100.0f),
-
+        a.add_custom_direct_2d_geometry<true, GeometriesShape::RECTANGLE, ID2D1LinearGradientBrush*, ID2D1RadialGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
+            { 30.0f , 30.0f , 500.0f , 200.0f },
+            
             { 
-              .fills_brush_info{ D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.4f , D2D1::ColorF(D2D1::ColorF::Coral) } , {0.7f , D2D1::ColorF(D2D1::ColorF::MediumSeaGreen)} , {0.9f , D2D1::ColorF(D2D1::ColorF::DeepPink)}} ,
-               D2D1::Point2F(130.0f , 100.0f) , 20.0f , 20.0f } ,
-              
-              .fills_distance_from_stroke{ 20 } ,
-              
-              .strokes_brush_info{ D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.4f , D2D1::ColorF(D2D1::ColorF::HotPink) } , {0.7f , D2D1::ColorF(D2D1::ColorF::CornflowerBlue)} , {0.9f , D2D1::ColorF(D2D1::ColorF::MediumVioletRed)}} ,
-               {80.0f , 50.0f} , {180.0f , 150.0f} } ,
-              
-              .strokes_width{ 6.5f } ,
-            }
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.1f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.3f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.5f , D2D1::ColorF(D2D1::ColorF::DarkViolet) }, {0.6f , D2D1::ColorF(D2D1::ColorF::DeepPink)}} , {0.0f , 30.0f} , {0.0f , 150.0f}},
+                20 , 
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.1f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.3f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.5f , D2D1::ColorF(D2D1::ColorF::DarkViolet) }, {0.6f , D2D1::ColorF(D2D1::ColorF::DeepPink)}} , D2D1::Point2F(100.0f , 100.0f) , 470.0f , 100.0f } ,
+                7.5f ,
+                { false , false }
+            },
 
-            ,
-
-            { { XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
+            { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
         );
+
+        a.add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
+            { D2D1::Point2F(800 , 90.f) , 50.0f , 50.0f },
+
+            {
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.5f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.7f , D2D1::ColorF(D2D1::ColorF::DarkViolet) } } , D2D1::Point2F(800 , 90) , 30.0f , 30.0f },
+
+                10 ,
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.5f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {750.0f , 40.0f} , {850.0f , 140.0f}  } ,
+                4.5f ,
+                { false , false }
+            },
+
+
+            { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
+        );
+        
+
+
+        b.add_custom_direct_2d_geometry<true, GeometriesShape::ROUNDED_RECTANGLE, ID2D1LinearGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
+            { 30.0f , 30.0f , 600.0f , 200.0f , 100.0f , 130.0f },
+            
+            {
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.5f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {30.0f, 30.0f} , {100.0f , 100.0f} } ,
+                50 ,
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.5f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {30.0f, 30.0f} , {100.0f , 100.0f} } ,
+                6.5f ,
+                { false , true }
+            },
+
+            { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
+        );
+
 
         break;
 	}
@@ -541,11 +541,6 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
     // #29 Handle left clicked hold event outside of static windows in main windows procedure  
 
     case WM_MOUSEMOVE: {
-
-        if (word_parameter & MK_LBUTTON) {
-            std::cout << "Left Clicked in Main Window " << '\n';
-        }
-
         break;
     }
 
@@ -586,7 +581,6 @@ void execute_the_main_window(COLORREF background_color) {
 
 // #2
 
-
 int main() {
     execute_the_main_window(RGB(0 , 0 , 0));
 
@@ -594,12 +588,9 @@ int main() {
     return 0;
 }
 
-// last comment #30
+// last comment #31
 
 // deleted comments = #15
-
-// !!! Duplication in add_custom_direct_2d_geometries function overload
-// !!! Duplication in WM_MOUSEMOVE and WM_LUBTTIONDOWN
 
 
 // https://github.com/camhead2004/D2CG/blob/master/D2CG/main_file.cpp

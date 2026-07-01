@@ -134,6 +134,7 @@ struct GeometriesCustomStyle {
     unsigned int fills_distance_from_stroke{};
     Direct2DBrushStyle<StrokesBrushType> strokes_brush_info{};
     FLOAT strokes_width{};
+    std::pair<bool, bool> move_the_gradients_dimension{ true , true };
     FillsBrushType fills_brush_ptr{};
     StrokesBrushType strokes_brush_ptr{};
 };
@@ -198,11 +199,13 @@ public:
     virtual bool is_static_geometry() = 0;
     virtual DimensionVariantPtr get_dimension_ptr() = 0;
     virtual D2D1_POINT_2F get_geometries_center_position(DimensionVariantPtr geometries_dimension_ptr) = 0;
+    virtual void set_gradient_geometries_dimension(BrushVariantPtrPtr geometries_brush_ptr_ptr , D2D1_POINT_2F* new_coordinate_ptr) = 0;
     virtual void set_geometries_new_coordinate(ID2D1Factory** static_windows_factory_ptr_ptr, DimensionVariantPtr dimension_ptr, GeometriesVariantPtrPtr geometry_ptr_ptr, D2D1_POINT_2F* new_coordinate) = 0;
     virtual std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> get_geometries_brush() = 0;
     virtual GeometriesVariantPtrPtr get_shapes_geometry_ptr_ptr() = 0;
     virtual unsigned int get_fills_distance_from_stroke() = 0;
     virtual FLOAT get_strokes_width() = 0;
+    virtual std::pair<bool, bool> get_moving_gradients_dimension_flag() { return { true , true }; };
 
     // #24 Make default specialization for GeometriesWrapper false partial specialization and override it in true partial specialization  
 
@@ -259,11 +262,40 @@ public:
             ;}, geometries_dimension_ptr);
     }
 
+
+    void set_gradient_geometries_dimension(BrushVariantPtrPtr geometries_brush_ptr_ptr , D2D1_POINT_2F* new_coordinate_ptr) override {
+
+        std::visit([this , new_coordinate_ptr](auto&& brush_ptr_ptr) {
+            using BrushType = std::decay_t<decltype(brush_ptr_ptr)>;
+
+            if constexpr (std::is_same_v<BrushType, ID2D1LinearGradientBrush**>) {
+                ID2D1LinearGradientBrush** current_linear_brush_ptr_ptr{ brush_ptr_ptr };
+                D2D1_POINT_2F linear_gradients_start_point{ (*current_linear_brush_ptr_ptr)->GetStartPoint() };
+                D2D1_POINT_2F linear_gradients_end_point{ (*current_linear_brush_ptr_ptr)->GetEndPoint() };
+                D2D1_POINT_2F new_linear_gradients_start_point{ D2D1::Point2F(linear_gradients_start_point.x + new_coordinate_ptr->x , linear_gradients_start_point.y + new_coordinate_ptr->y) };
+                D2D1_POINT_2F new_linear_gradients_end_point{ D2D1::Point2F(linear_gradients_end_point.x + new_coordinate_ptr->x , linear_gradients_end_point.y + new_coordinate_ptr->y) };
+                (*current_linear_brush_ptr_ptr)->SetStartPoint(new_linear_gradients_start_point);
+                (*current_linear_brush_ptr_ptr)->SetEndPoint(new_linear_gradients_end_point);
+            }
+
+            else if constexpr (std::is_same_v<BrushType, ID2D1RadialGradientBrush**>) {
+                ID2D1RadialGradientBrush** current_radial_brush_ptr_ptr{ brush_ptr_ptr };
+                D2D1_POINT_2F radial_gradients_center_value{ (*current_radial_brush_ptr_ptr)->GetCenter() };
+                D2D1_POINT_2F new_radial_gradients_centers_coordinate{ D2D1::Point2F(radial_gradients_center_value.x + new_coordinate_ptr->x , radial_gradients_center_value.y + new_coordinate_ptr->y) };
+                (*current_radial_brush_ptr_ptr)->SetCenter(new_radial_gradients_centers_coordinate);
+            }
+            
+        ; } , geometries_brush_ptr_ptr);
+
+
+    }
+
     void set_geometries_new_coordinate(ID2D1Factory** static_windows_factory_ptr_ptr , DimensionVariantPtr dimension_ptr , GeometriesVariantPtrPtr geometry_ptr_ptr , D2D1_POINT_2F* new_coordinate) override {
 
-        std::visit([static_windows_factory_ptr_ptr , dimension_ptr, new_coordinate](auto&& dimension, auto&& geometry_ptr_ptr) {
+        std::visit([this , static_windows_factory_ptr_ptr, dimension_ptr, new_coordinate](auto&& dimension, auto&& geometry_ptr_ptr) {
             using CurrentDimensionType = std::decay_t<decltype(dimension)>;
             using CurrentGeometryType = std::decay_t<decltype(geometry_ptr_ptr)>;
+            std::pair<BrushVariantPtrPtr, BrushVariantPtrPtr> geometries_brush{ this->get_geometries_brush() };
 
             if constexpr (std::is_same_v<CurrentDimensionType, D2D1_ELLIPSE*> && std::is_same_v<CurrentGeometryType , ID2D1EllipseGeometry**>) {
                 D2D1_ELLIPSE* new_ellipse_dimension_ptr{ dimension };
@@ -271,6 +303,14 @@ public:
                 new_ellipse_dimension_ptr->point.y += new_coordinate->y;
 
                 (*static_windows_factory_ptr_ptr)->CreateEllipseGeometry(*dimension, geometry_ptr_ptr);
+
+                if (this->get_moving_gradients_dimension_flag().first) {
+                    this->set_gradient_geometries_dimension(geometries_brush.first, new_coordinate);
+                }
+
+                else if (this->get_moving_gradients_dimension_flag().second) {
+                    this->set_gradient_geometries_dimension(geometries_brush.second, new_coordinate);
+                }
             }
 
             else if constexpr (std::is_same_v <CurrentDimensionType, D2D1_RECT_F*> && std::is_same_v<CurrentGeometryType, ID2D1RectangleGeometry**>) {
@@ -285,6 +325,15 @@ public:
                 new_rectangle_dimension_ptr->right = rectangles_center_position.x + (old_rectangles_size.x / 2.0f);
                 new_rectangle_dimension_ptr->bottom = rectangles_center_position.y + (old_rectangles_size.y / 2.0f);
                 (*static_windows_factory_ptr_ptr)->CreateRectangleGeometry(*dimension, geometry_ptr_ptr);
+
+                if (this->get_moving_gradients_dimension_flag().first) {
+                    this->set_gradient_geometries_dimension(geometries_brush.first, new_coordinate);
+                }
+
+                else if (this->get_moving_gradients_dimension_flag().second) {
+                    this->set_gradient_geometries_dimension(geometries_brush.second, new_coordinate);
+                }
+
             }
 
             else if constexpr (std::is_same_v <CurrentDimensionType, D2D1_ROUNDED_RECT*> && std::is_same_v<CurrentGeometryType, ID2D1RoundedRectangleGeometry**>) {
@@ -301,6 +350,14 @@ public:
                 new_rounded_rectangle_dimension_ptr->rect.right = rounded_rectangles_center_position.x + (old_rounded_rectangle_size.x / 2.0f);
                 new_rounded_rectangle_dimension_ptr->rect.bottom = rounded_rectangles_center_position.y + (old_rounded_rectangle_size.y / 2.0f);
                 (*static_windows_factory_ptr_ptr)->CreateRoundedRectangleGeometry(*dimension, geometry_ptr_ptr);
+
+                if (this->get_moving_gradients_dimension_flag().first) {
+                    this->set_gradient_geometries_dimension(geometries_brush.first, new_coordinate);
+                }
+
+                else if (this->get_moving_gradients_dimension_flag().second) {
+                    this->set_gradient_geometries_dimension(geometries_brush.second, new_coordinate);
+                }
             }
 
 
@@ -324,6 +381,14 @@ public:
     FLOAT get_strokes_width() override {
         return geos_info.geometries_style.strokes_width;
     };
+
+    // #31 get flag to move the geometries gradients dimension flag
+
+    std::pair<bool , bool> get_moving_gradients_dimension_flag() override {
+        return geos_info.geometries_style.move_the_gradients_dimension;
+    }
+
+    // #31
 
     void get_geometries_essential_info_in_run_time(GeometriesEssentialInfoInProc* geometries_info_ptr) override {
         geometries_info_ptr->current_shapes_geometry_variant = get_shapes_geometry_ptr_ptr();
