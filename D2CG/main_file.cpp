@@ -226,6 +226,7 @@ private :
         static std::pair<unsigned int, unsigned int> current_focused_moving_geometry{ -1 , -1 };
         GeometriesEssentialInfoInProc current_geometries_info_procs_data{};
         TRACKMOUSEEVENT mouse_tracker{ sizeof(TRACKMOUSEEVENT) , TME_LEAVE , current_static_windows_handle , 0 };
+        std::vector<StaticWindowsStyle>* static_windows_style_ptr { (std::vector<StaticWindowsStyle>*)GetWindowLongPtr(current_static_windows_handle , GWLP_HINSTANCE) };
 
         switch (message_type) {
 
@@ -235,12 +236,13 @@ private :
             PAINTSTRUCT windows_paint_info{};
             HDC static_windows_device_context_handle{ BeginPaint(current_static_windows_handle , &windows_paint_info) };
             static_windows_target_ptr[ id - 1 ]->BeginDraw();
-            static_windows_target_ptr[id - 1]->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+            
+            static_windows_target_ptr[id - 1]->Clear((*static_windows_style_ptr)[id - 1].static_windows_background_color);
 
             ID2D1SolidColorBrush* static_windows_rects_brush_ptr { nullptr };
-            static_windows_target_ptr[id - 1]->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::DodgerBlue), &static_windows_rects_brush_ptr);
+            static_windows_target_ptr[id - 1]->CreateSolidColorBrush((*static_windows_style_ptr)[id - 1].static_windows_strokes_color, &static_windows_rects_brush_ptr);
 
-            static_windows_target_ptr[id - 1]->DrawRectangle(D2D1::RectF(windows_paint_info.rcPaint.left , windows_paint_info.rcPaint.top , windows_paint_info.rcPaint.right , windows_paint_info.rcPaint.bottom) , static_windows_rects_brush_ptr , 3.0f , 0);
+            static_windows_target_ptr[id - 1]->DrawRectangle(D2D1::RectF(windows_paint_info.rcPaint.left , windows_paint_info.rcPaint.top , windows_paint_info.rcPaint.right , windows_paint_info.rcPaint.bottom) , static_windows_rects_brush_ptr , (*static_windows_style_ptr)[id - 1].static_windows_strokes_width , 0);
 
             
             for (int static_windows_geometry{ 0 }; static_windows_geometry < static_windows_custom_direct_2d_geometries[id - 1].size(); ++static_windows_geometry) {
@@ -486,18 +488,20 @@ private :
 // #7
 
 
-
-
 // #1 Set main window procedure 
 
 LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter) {
-    //static std::vector<HNWD> static_windows_with_custom_direct_2d_geometries {};
+    static std::pair<std::vector<HWND>, std::vector<StaticWindowsCustomGeometries>> static_windows_with_custom_direct_2d_geometries{};
+
 
     // Sample datas
+
+    /*
     static HWND static_1{};
     static HWND static_2{};
     StaticWindowsCustomGeometries a{};
     StaticWindowsCustomGeometries b{};
+    */
     
 
 	switch (message_type) {
@@ -507,12 +511,33 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         auto run_time_terminals_windows_rects_values_ptr{ get_screens_coordinate() };
         SetWindowPos(run_time_terminals_windows_handle, 0, run_time_terminals_windows_rects_values_ptr->right - 500, 0, 500, 400, 0);
         
-        static_1 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 10, 900, 380, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
-        static_2 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 400, 900, 340, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
-        a(&static_1);
-        b(&static_2);
+        std::vector<StaticWindowsStyle>* static_windows_info_ptr{ (std::vector<StaticWindowsStyle>*)((LPCREATESTRUCT)long_parameter)->lpCreateParams };
 
-        a.add_custom_direct_2d_geometry<true, GeometriesShape::RECTANGLE, ID2D1LinearGradientBrush*, ID2D1RadialGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
+        for (int static_windows_index{ 0 }; static_windows_index < static_windows_info_ptr->size(); ++static_windows_index) {
+            
+            static_windows_with_custom_direct_2d_geometries.first.push_back(
+                CreateWindowEx(
+                    0,
+                    WC_STATIC,
+                    0,
+                    WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW,
+                    (*static_windows_info_ptr)[static_windows_index].static_windows_rects_values.left,
+                    (*static_windows_info_ptr)[static_windows_index].static_windows_rects_values.top,
+                    (*static_windows_info_ptr)[static_windows_index].static_windows_rects_values.right - (*static_windows_info_ptr)[static_windows_index].static_windows_rects_values.left,
+                    (*static_windows_info_ptr)[static_windows_index].static_windows_rects_values.bottom - (*static_windows_info_ptr)[static_windows_index].static_windows_rects_values.top,
+                    main_windows_handle,
+                    0,
+                    ((LPCREATESTRUCT)long_parameter)->hInstance,
+                    0
+                )
+            );
+            
+            static_windows_with_custom_direct_2d_geometries.second.resize(static_windows_index + 1);
+            static_windows_with_custom_direct_2d_geometries.second[static_windows_index](&static_windows_with_custom_direct_2d_geometries.first.back());
+            SetWindowLongPtr(static_windows_with_custom_direct_2d_geometries.first.back() , GWLP_HINSTANCE , (LONG_PTR)static_windows_info_ptr);
+        }
+
+        static_windows_with_custom_direct_2d_geometries.second[ 0 ].add_custom_direct_2d_geometry<true, GeometriesShape::RECTANGLE, ID2D1LinearGradientBrush*, ID2D1RadialGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
             { 30.0f , 30.0f , 500.0f , 200.0f },
             
             { 
@@ -526,21 +551,21 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
             { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
         );
 
-        a.add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED | GeometriesMovingCtrl::LEFT_CLICKED_HOLD 
+        static_windows_with_custom_direct_2d_geometries.second[0].add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED | GeometriesMovingCtrl::LEFT_CLICKED_HOLD
             | GeometriesMovingCtrl::MOUSEWHEEL , GeometriesMovingSpace::X_AXIS_ONLY>(
             
             { D2D1::Point2F(800 , 90.f) , 50.0f , 50.0f },
 
             {
-                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.5f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.7f , D2D1::ColorF(D2D1::ColorF::DarkViolet) } } , D2D1::Point2F(800 , 90) , 30.0f , 30.0f },
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.4f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.7f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } } , D2D1::Point2F(800 , 90) , 30.0f , 30.0f },
 
                 10 ,
 
-                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.5f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {750.0f , 40.0f} , {850.0f , 140.0f}  } ,
+                {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.6f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {750.0f , 0.0f} , {950.0f , 0.0f}  } ,
                 
                 4.5f ,
 
-                { true , true }
+                { true , false }
             },
 
 
@@ -549,7 +574,7 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         
 
 
-        b.add_custom_direct_2d_geometry<true, GeometriesShape::ROUNDED_RECTANGLE, ID2D1LinearGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED_HOLD , GeometriesMovingSpace::FREE>(
+        static_windows_with_custom_direct_2d_geometries.second[1].add_custom_direct_2d_geometry<true, GeometriesShape::ROUNDED_RECTANGLE, ID2D1LinearGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED_HOLD , GeometriesMovingSpace::FREE>(
             { 30.0f , 30.0f , 600.0f , 200.0f , 100.0f , 130.0f },
             
             {
@@ -588,10 +613,12 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
 
 // #2 Execute main windows in run time 
 
-void execute_the_main_window(COLORREF background_color) {
+void execute_the_main_window(RECT main_windows_rects_values , COLORREF background_color , std::vector<StaticWindowsStyle> static_windows_style_info) {
     WNDCLASS windows_class{ .lpfnWndProc{ main_windows_proc } , .hInstance{ GetModuleHandle(0) } , .hCursor{ LoadCursor(NULL, IDC_ARROW) } , .hbrBackground{ CreateSolidBrush(background_color) } , .lpszClassName{ TEXT("Main Window") } };
     RegisterClass(&windows_class);
-    HWND main_windows_handle{ CreateWindowEx(0 ,  windows_class.lpszClassName , TEXT("Windows.exe") , WS_OVERLAPPEDWINDOW | WS_VISIBLE , 0 , 0 , 1000 , 800 , 0 , 0 , windows_class.hInstance , 0) };
+    
+    HWND main_windows_handle{ CreateWindowEx(0 ,  windows_class.lpszClassName , TEXT("Windows.exe") , WS_OVERLAPPEDWINDOW | WS_VISIBLE , main_windows_rects_values.left , main_windows_rects_values.top , main_windows_rects_values.right - main_windows_rects_values.left , main_windows_rects_values.bottom - main_windows_rects_values.top , 0 , 0 , windows_class.hInstance , &static_windows_style_info) };
+
     MSG windows_message{};
 
 	// #3 Get windows current message in run time and dispatch to main windows procedure
@@ -610,7 +637,8 @@ void execute_the_main_window(COLORREF background_color) {
 // #2
 
 int main() {
-    execute_the_main_window(RGB(0 , 0 , 0));
+    execute_the_main_window({ 0 , 0 , 1050 , 820 }, RGB(0 , 0 , 0), 
+    { { {10 , 10 , 1000 , 400 } , D2D1::ColorF(D2D1::ColorF::BlueViolet) , D2D1::ColorF(D2D1::ColorF::DodgerBlue) , 13.5f } , { {10 , 430 , 1000 , 770 } , D2D1::ColorF(D2D1::ColorF::Black) , D2D1::ColorF(D2D1::ColorF::LightBlue) , 13.5f} });
 
 
     return 0;
