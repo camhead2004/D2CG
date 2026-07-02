@@ -30,7 +30,7 @@ Each geometries can have their own strokes color and fills color and you set str
 The two part of the Direct2D geometry (fill and stroke) , each of them can be colored in a solid , linear gradient and radial gradient way 
 
 For linear gradinet you set StarPoint and EndPoint , to express lienr gradinets coloring (e.g .StartPoint{ 100 , 100 } , .EndPoint{ 200 , 200 } = diagonal linear gradinet , 
-{750.0f , 0.0f} , {950.0f , 0.0f} = vetical gradient , {0.0f , 40.0f} , {0.0f , 140.0f} = horizontal gradient)
+.StartPoint{750.0f , 0.0f} , .EndPoint{950.0f , 0.0f} = vetical gradient , .StartPoint{0.0f , 40.0f} , .EndPoint{0.0f , 140.0f} = horizontal gradient)
 
 
 
