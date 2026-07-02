@@ -17,11 +17,9 @@ These are some the customization option for every geometries that project provid
 - Ellipse :
   Able to set ellipse center and ellipse x radius and y radius.
 
-- Rectangle :
-- Able to set rectangles top-left and right-bottom position.
+- Rectangle : Able to set rectangles top-left and right-bottom position.
 
-- Rounded Rectangle :
-  Like Rectangle plus you can set how much the rectangle can be rounded in both x and y axis.
+- Rounded Rectangle : Like Rectangle plus you can set how much the rectangle can be rounded in both x and y axis.
 
 Similar customization : 
 
