@@ -308,7 +308,7 @@ public:
                     this->set_gradient_geometries_dimension(geometries_brush.first, new_coordinate);
                 }
 
-                else if (this->get_moving_gradients_dimension_flag().second) {
+                if (this->get_moving_gradients_dimension_flag().second) {
                     this->set_gradient_geometries_dimension(geometries_brush.second, new_coordinate);
                 }
             }
@@ -330,7 +330,7 @@ public:
                     this->set_gradient_geometries_dimension(geometries_brush.first, new_coordinate);
                 }
 
-                else if (this->get_moving_gradients_dimension_flag().second) {
+                if (this->get_moving_gradients_dimension_flag().second) {
                     this->set_gradient_geometries_dimension(geometries_brush.second, new_coordinate);
                 }
 
@@ -355,7 +355,7 @@ public:
                     this->set_gradient_geometries_dimension(geometries_brush.first, new_coordinate);
                 }
 
-                else if (this->get_moving_gradients_dimension_flag().second) {
+                if (this->get_moving_gradients_dimension_flag().second) {
                     this->set_gradient_geometries_dimension(geometries_brush.second, new_coordinate);
                 }
             }

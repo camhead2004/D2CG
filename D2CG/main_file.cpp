@@ -236,6 +236,12 @@ private :
             HDC static_windows_device_context_handle{ BeginPaint(current_static_windows_handle , &windows_paint_info) };
             static_windows_target_ptr[ id - 1 ]->BeginDraw();
             static_windows_target_ptr[id - 1]->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+
+            ID2D1SolidColorBrush* static_windows_rects_brush_ptr { nullptr };
+            static_windows_target_ptr[id - 1]->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::DodgerBlue), &static_windows_rects_brush_ptr);
+
+            static_windows_target_ptr[id - 1]->DrawRectangle(D2D1::RectF(windows_paint_info.rcPaint.left , windows_paint_info.rcPaint.top , windows_paint_info.rcPaint.right , windows_paint_info.rcPaint.bottom) , static_windows_rects_brush_ptr , 3.0f , 0);
+
             
             for (int static_windows_geometry{ 0 }; static_windows_geometry < static_windows_custom_direct_2d_geometries[id - 1].size(); ++static_windows_geometry) {
                 ID2D1HwndRenderTarget** current_windows_render_target { &static_windows_target_ptr[id - 1] };
@@ -300,6 +306,11 @@ private :
             TrackMouseEvent(&mouse_tracker);
 
             if (word_parameter & MK_LBUTTON && (current_focused_moving_geometry.first != -1 && current_focused_moving_geometry.second != -1)) {
+                RECT current_static_windows_rects_values{};
+                GetWindowRect(current_static_windows_handle , &current_static_windows_rects_values);
+                current_static_windows_rects_values = { current_static_windows_rects_values.left + 2 , current_static_windows_rects_values.top + 2 , current_static_windows_rects_values.right - 2 , current_static_windows_rects_values.bottom - 2 };
+                ClipCursor(&current_static_windows_rects_values);
+
                 set_moving_geometries_coordinate_in_left_click_events(&current_static_windows_handle , id , static_windows_custom_direct_2d_geometries[current_focused_moving_geometry.first][current_focused_moving_geometry.second].get(),
                     &current_geometries_info_procs_data, &current_focused_moving_geometry, true);
             }
@@ -308,7 +319,7 @@ private :
         }
 
         case WM_MOUSELEAVE: {
-            current_focused_moving_geometry = { -1 , -1 };
+            //current_focused_moving_geometry = { -1 , -1 };
             break;
         }
 
@@ -405,6 +416,14 @@ private :
 
         case WM_LBUTTONDOWN: {
         case WM_LBUTTONDBLCLK : 
+            
+            // #32 Make current_focused_moving_geometry to -1 , -1 to avoid moving ctrl execute when the previous  windows is not focused 
+
+            if ((id - 1) != current_focused_moving_geometry.first) {
+                current_focused_moving_geometry = { -1 , -1 };
+            }
+
+            // #32
 
             // #27 Set a focus value for moving geometry bases on the left clicked event on run time 
 
@@ -449,6 +468,11 @@ private :
             break;
         }
 
+        case WM_LBUTTONUP: {
+            ClipCursor(nullptr);
+            break;
+        }
+
         }
 
 
@@ -462,19 +486,19 @@ private :
 // #7
 
 
+
+
 // #1 Set main window procedure 
 
 LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type , WPARAM word_parameter , LPARAM long_parameter) {
+    //static std::vector<HNWD> static_windows_with_custom_direct_2d_geometries {};
 
     // Sample datas
     static HWND static_1{};
     static HWND static_2{};
     StaticWindowsCustomGeometries a{};
     StaticWindowsCustomGeometries b{};
-
-    static ID2D1Factory* main_windows_factory_ptr{ nullptr };
-    static ID2D1HwndRenderTarget* main_windows_render_target_ptr{ nullptr };
-
+    
 
 	switch (message_type) {
 
@@ -482,7 +506,7 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
         HWND run_time_terminals_windows_handle{ GetConsoleWindow() };
         auto run_time_terminals_windows_rects_values_ptr{ get_screens_coordinate() };
         SetWindowPos(run_time_terminals_windows_handle, 0, run_time_terminals_windows_rects_values_ptr->right - 500, 0, 500, 400, 0);
-
+        
         static_1 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 10, 900, 380, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
         static_2 = CreateWindowEx(0, WC_STATIC, 0, WS_VISIBLE | WS_CHILD | WS_BORDER | SS_NOTIFY | SS_OWNERDRAW, 10, 400, 900, 340, main_windows_handle, 0, ((LPCREATESTRUCT)long_parameter)->hInstance, 0);
         a(&static_1);
@@ -496,31 +520,36 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
                 20 , 
                 {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.1f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.3f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.5f , D2D1::ColorF(D2D1::ColorF::DarkViolet) }, {0.6f , D2D1::ColorF(D2D1::ColorF::DeepPink)}} , D2D1::Point2F(100.0f , 100.0f) , 470.0f , 100.0f } ,
                 7.5f ,
-                { false , false }
+                { false , true }
             },
 
             { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
         );
 
-        a.add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
+        a.add_custom_direct_2d_geometry<true, GeometriesShape::ELLIPSE, ID2D1RadialGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED | GeometriesMovingCtrl::LEFT_CLICKED_HOLD 
+            | GeometriesMovingCtrl::MOUSEWHEEL , GeometriesMovingSpace::X_AXIS_ONLY>(
+            
             { D2D1::Point2F(800 , 90.f) , 50.0f , 50.0f },
 
             {
                 {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::RoyalBlue) } , {0.5f , D2D1::ColorF(D2D1::ColorF::MediumSpringGreen) } , {0.7f , D2D1::ColorF(D2D1::ColorF::DarkViolet) } } , D2D1::Point2F(800 , 90) , 30.0f , 30.0f },
 
                 10 ,
+
                 {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.5f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {750.0f , 40.0f} , {850.0f , 140.0f}  } ,
+                
                 4.5f ,
-                { false , false }
+
+                { true , true }
             },
 
 
-            { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
+            { {XYDirection::LEFT , XYDirection::RIGHT , XYDirection::RIGHT , XYDirection::LEFT} , { XYDirection::RIGHT , XYDirection::LEFT } }
         );
         
 
 
-        b.add_custom_direct_2d_geometry<true, GeometriesShape::ROUNDED_RECTANGLE, ID2D1LinearGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY, GeometriesMovingSpace::FREE>(
+        b.add_custom_direct_2d_geometry<true, GeometriesShape::ROUNDED_RECTANGLE, ID2D1LinearGradientBrush*, ID2D1LinearGradientBrush*, GeometriesMovingCtrl::ARROW_KEY | GeometriesMovingCtrl::LEFT_CLICKED_HOLD , GeometriesMovingSpace::FREE>(
             { 30.0f , 30.0f , 600.0f , 200.0f , 100.0f , 130.0f },
             
             {
@@ -528,12 +557,11 @@ LRESULT CALLBACK main_windows_proc(HWND main_windows_handle , UINT message_type 
                 50 ,
                 {D2D1_GAMMA_2_2 , D2D1_EXTEND_MODE_MIRROR , { {0.3f , D2D1::ColorF(D2D1::ColorF::BlueViolet) } , {0.5f , D2D1::ColorF(D2D1::ColorF::Orange)} } , {30.0f, 30.0f} , {100.0f , 100.0f} } ,
                 6.5f ,
-                { false , true }
+                { true , false }
             },
 
             { {XYDirection::LEFT , XYDirection::UP , XYDirection::RIGHT , XYDirection::DOWN} }
         );
-
 
         break;
 	}
@@ -588,7 +616,7 @@ int main() {
     return 0;
 }
 
-// last comment #31
+// last comment #32
 
 // deleted comments = #15
 
